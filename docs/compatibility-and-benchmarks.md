@@ -8,6 +8,8 @@ The only recorded browser environment is Chrome 150 on an Apple M3 Max Mac with 
 
 Until the complete pipeline and package are available, compatibility should be described as experimental even on the measured machine.
 
+An additional Mac-local quality path is qualified separately on an Apple M3 Max. It still requires browser WebGPU for DINO, VAE, octree, and Gaussian decoding, but runs the complete flow sampler through official fp32 PyTorch/MPS over authenticated loopback.
+
 ## What a compatibility check can know
 
 A browser can report whether `navigator.gpu` exists, whether an adapter/device can be requested, and selected device limits and features. It cannot reliably report total GPU memory, free unified memory, or the ONNX Runtime/driver peak allocation that a future generation will require.
@@ -26,6 +28,24 @@ A structured compatibility report should therefore include:
 It must not convert JavaScript heap size or `maxBufferSize` into a claim about available GPU memory.
 
 ## Measured results
+
+### Twenty-step native Mac MPS flow
+
+| Metric | Value |
+| --- | ---: |
+| Hardware | Apple M3 Max |
+| Backend | Untouched official PyTorch/MPS fp32 |
+| Model load | 2,248.3 ms |
+| Sampling inference, 40 DiT calls | 347,092.6 ms |
+| Request wall | 347,422.2 ms |
+| Request / response | 23,621,140 / 524,308 bytes |
+| Latent maximum absolute error | 0 |
+| Camera maximum absolute error | 0 |
+| Output hashes | Bit-exact fixture matches |
+| Qualification envelope | **Passed** |
+| Strict diagnostic | **Passed** |
+
+This is the promoted Mac 20-step path. On the same recorded M3 Max class, its 347,092.6 ms sampling time is 48.7% lower than the historical 676,669.1 ms conservative WebGPU record and 52.6% lower than the rejected 731,902.9 ms `all` optimizer run. The service/client path is exact on the fixed fixture. Evidence: [`Mac MPS validation`](validation/2026-07-18-flow20-mac-mps-service.json).
 
 Environment shared by all browser measurements:
 
@@ -131,6 +151,12 @@ The control loop completed all 40 WebGPU invocations without fallback. This is a
 A user identifying the GPU as an RTX 3090 supplied a Linux/Chrome 148 public-runner report; Chromium exposed the adapter as `nvidia ampere`. With the full 6.02 GiB OPFS cache already present, zero bytes downloaded, fp32 precision, and the 20-step/40-call schedule, end-to-end wall time was 472.2 seconds. Sampling consumed 305.0 seconds, of which reported DiT inference was 301.9 seconds (about 7.55 seconds per call); all DiT readback totaled 7 milliseconds. DINO, VAE, octree, and Gaussian inference totaled 12.16 seconds.
 
 This self-reported run is not a controlled hardware qualification and does not independently prove the exact GPU SKU, numerical parity, peak VRAM, driver version, or ONNX Runtime version. It nevertheless narrows the performance diagnosis: readback and host CFG/Euler work are not the primary bottlenecks, while fp32 DiT execution and approximately 93 seconds of inferred graph/session setup overhead are the useful targets. The user also reported that 20 steps produced visibly acceptable output while four steps was too low quality, so reducing the public quality path to four steps is not an acceptable optimization. Evidence and next actions: [`RTX 3090-class 20-step performance`](rtx3090-20-step-performance.md) and [`machine-readable community report`](benchmarks/2026-07-18-rtx3090-community-warm-opfs-fp32.json).
+
+### Repository-controlled DiT diagnostic A/B
+
+The new opt-in DiT lab records `GraphInfo.loadMs`, one unprofiled warm-up, a warmed invocation-7 baseline, and separate invocation-7/invocation-8 diagnostic requests. On Chrome 150 with an Apple `metal-3` adapter, canonical `graphOptimizationLevel: 'disabled'` loaded in 15,557.4 ms and ran the warmed conditional call in 12,993.7 ms. Lab-only `all` loaded in 10,251.4 ms and ran the same warmed call in 11,844.3 ms, reductions of 34.11% and 8.85%. Invocation 7 passed its unchanged strict gate in both configurations; invocation 8 failed in both.
+
+The complete Mac follow-up ran all 40 calls with `all`. Session load fell to 9,552.0 ms, but sampling took 731,902.9 ms—8.16% slower than the historical 676,669.1 ms conservative run. Final latent error improved modestly but still failed both qualification and strict gates. The adapter exposed `timestamp-query`, but the installed ONNX Runtime 1.27 native WebGPU entrypoint emitted no `env.webgpu.profiling.ondata` records. The result explicitly reports `no-records`; zero is not treated as zero GPU work, and no hardware-occupancy or profiling-overhead claim is made. Graph capture was rejected because the current session requests CPU outputs while ORT capture requires `gpu-buffer`. Neither optimization is promoted. Evidence: [`profiling analysis`](dit-webgpu-profiling.md), [`paired result`](benchmarks/2026-07-18-dit-webgpu-profile-apple-metal3.json), and [`complete optimized run`](benchmarks/2026-07-18-flow20-fp32-webgpu-optimization-all.json).
 
 ### Eight-level fp32 octree trajectory
 

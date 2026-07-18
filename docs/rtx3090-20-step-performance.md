@@ -53,8 +53,8 @@ The product direction is to preserve 20 steps and reduce per-call cost. Four ste
 | Session recreated every DiT call | Ruled out; one DiT session serves all 40 calls |
 | K=256 candidate active | Ruled out; the canonical manifest remains deployed |
 | fp32 40-call workload dominates | Confirmed |
-| Many small/unfused WebGPU dispatches | Plausible; dispatch-level profiling is not yet recorded |
-| Session construction and shader compilation matter | Likely and material, but current stage categories do not isolate them |
+| Many small/unfused WebGPU dispatches | Plausible; the installed ORT 1.27 native WebGPU EP emitted no callback records even with timestamp queries available |
+| Session construction and shader compilation matter | Confirmed measurable through `GraphInfo.loadMs`; a controlled Apple run recorded 15.56 s for canonical DiT load |
 
 ## Optimization order
 
@@ -63,6 +63,8 @@ The product direction is to preserve 20 steps and reduce per-call cost. Four ste
 Enable ONNX Runtime WebGPU profiling only in a diagnostic lab and configure it before session creation. Run an unprofiled warm-up, then separately profile a deterministic conditional call and the known zero-conditioned call. Record wall time, profile-record or dispatch count, summed GPU duration where exposed, median and p95 duration, top kernels by cumulative time, and wall time not explained by GPU records. Add per-session `GraphInfo.loadMs` to reports.
 
 The canonical pipeline explicitly uses `graphOptimizationLevel: 'disabled'` because exported `Add(0)` barriers are parity-sensitive. A lab may compare disabled, basic, and all optimization, but no optimized setting can be promoted without the existing numerical trajectory gates.
+
+This diagnostic now exists. On the repository-controlled Apple `metal-3` run, ORT 1.27's native WebGPU entrypoint exposed `timestamp-query` but delivered zero `profiling.ondata` records, so no kernel-time or profiling-overhead claim is made. Wall timing and load timing remain valid. `graphOptimizationLevel: 'all'` reduced session load by 34.11% and a warmed invocation-7 call by 8.85%, while invocation 7 still passed and invocation 8 remained failed at nearly unchanged error. The full 40-call follow-up then took 731.9 seconds, 8.16% slower than the historical 676.7-second conservative run, and still failed numerical qualification. It remains lab-only. See [`DiT WebGPU profiling`](dit-webgpu-profiling.md).
 
 ONNX Runtime documents `ort.env.webgpu.profiling`, `ort.env.trace`, graph capture, and GPU tensor placement in its [Web performance diagnosis](https://onnxruntime.ai/docs/tutorials/web/performance-diagnosis.html) and [environment/session options](https://onnxruntime.ai/docs/tutorials/web/env-flags-and-session-options.html) guides. WebGPU timing does not expose true NVIDIA SM occupancy. Coarse utilization may be observed externally; hardware occupancy claims require an appropriate GPU profiler or native reproduction.
 
@@ -80,7 +82,7 @@ A same-tab, all-session steady-state run might remove much of the approximately 
 
 ### 3. A/B graph capture after profiling
 
-The DiT has fixed shapes and repeats 40 times, making it structurally suitable for an `enableGraphCapture` experiment. Capture replays command preparation; it does not reduce FLOPs, fuse kernels, or correct the attention reduction. It is valuable only if profiling finds substantial CPU submission gaps. Keep it lab-only until initialization, memory behavior, cancellation, and numerical output pass.
+The DiT has fixed shapes and repeats 40 times, making it structurally suitable for an `enableGraphCapture` experiment. Capture replays command preparation; it does not reduce FLOPs, fuse kernels, or correct the attention reduction. The first lab attempt is a no-go with the current contract: ORT requires `gpu-buffer` outputs when capture is enabled, while the correctness path intentionally returns CPU tensors for host fp32 CFG/Euler. Keep capture off until an explicit GPU-buffer lab passes initialization, memory behavior, cancellation, and complete numerical output gates.
 
 ### 4. Develop mixed FP16/FP32 DiT, not an automatic all-FP16 path
 
@@ -94,6 +96,6 @@ Removing 7 ms of readback is not a performance objective. GPU-resident state mat
 
 ## Decision
 
-Preserve the 20-step public quality path. Profile before changing precision or runtime structure; then pursue retained DiT sessions for repeat-run latency and a carefully mixed-precision DiT for single-run latency. Do not promote K=256, collapsed context, graph optimization, graph capture, or FP16 from timing alone.
+Preserve the 20-step public quality path. The complete Mac `all` run is a no-go; a thermally controlled full-trajectory comparison on target NVIDIA hardware remains useful but cannot justify a Mac default. Pursue retained DiT sessions only for measured repeat-run latency and a carefully mixed-precision DiT for single-run latency. Do not promote K=256, collapsed context, graph optimization, graph capture, or FP16 from timing alone.
 
 External ONNX Runtime documentation descriptions above are paraphrased for licensing compliance.

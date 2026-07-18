@@ -35,6 +35,7 @@ Open the exact URL printed by Vite, then choose one of:
 - `encoder-lab.html` for preprocessing and VAE comparison;
 - `dino-lab.html` for preprocessing and the full fp32 DINOv3 feature tensor;
 - `dit-lab.html` for one fixed DiT invocation;
+- `dit-profile-lab.html?autorun=1` for an unprofiled warm-up plus isolated invocation-7/invocation-8 WebGPU diagnostics;
 - `flow-lab.html` for a fixture-declared four-step or 20-step loop;
 - `octree-lab.html` for one fp32 occupancy-logit invocation or the full eight-level neural/host trajectory;
 - `gaussian-lab.html` for one fp32 raw 480-feature decoder invocation;
@@ -42,6 +43,8 @@ Open the exact URL printed by Vite, then choose one of:
 - the root page for the preserved SHARP path.
 
 The component labs report narrow numerical gates. The E2E lab reports complete execution, lifecycle, finiteness, lengths, export sanity, and exported-PLY viewer/canvas readiness while explicitly setting `numericalParityClaimed: false`; do not reinterpret it as official whole-scene or rendered-pixel parity.
+
+The DiT profiling lab supports `optimization=disabled|basic|all`, `capture=1`, and `trace=1`. Profiling and trace are opt-in startup settings, and raw kernel records are returned only when the selected ONNX Runtime WebGPU backend emits them. See [`DiT WebGPU profiling`](dit-webgpu-profiling.md) for the exact contract and the recorded native-EP limitation.
 
 ## Model and fixture setup
 

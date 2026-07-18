@@ -24,7 +24,7 @@ Primary evidence: [`flow20 browser benchmark`](benchmarks/2026-07-15-flow20-fp32
 
 A community RTX 3090-class report adds an important product observation: the 20-step output was visibly acceptable, while four steps produced inadequate quality. This does not conflict with the four-step qualification pass or the 20-step parity failure. Four-step parity measures agreement with the official four-step trajectory, not whether four large Euler updates are sufficient for the desired geometry. Twenty smaller updates apply conditioning and CFG repeatedly and can produce a perceptually better scene even while small per-call ONNX reduction differences accumulate relative to the official 20-step state. The octree can then amplify either useful latent refinement or numerical drift into discrete topology changes.
 
-The quality path must therefore remain 20 steps while performance work targets the cost of each DiT call. The warm-cache report measured 301.9 seconds of DiT inference, about 64% of a 472.2-second run, while all DiT readback totaled only 7 milliseconds. The next bounded work is dispatch/kernel profiling, per-session load timing, opt-in retained sessions, a graph-capture A/B, and only then a mixed FP16/FP32 DiT. Details: [`RTX 3090-class 20-step performance`](rtx3090-20-step-performance.md).
+The quality path must therefore remain 20 steps while performance work targets the cost of each DiT call. The warm-cache report measured 301.9 seconds of DiT inference, about 64% of a 472.2-second run, while all DiT readback totaled only 7 milliseconds. Opt-in profiling, per-session load timing, and graph optimization/capture A/B now exist. The installed ORT native WebGPU EP emitted no kernel records. A complete Mac `graphOptimizationLevel=all` run loaded faster but took 731.9 seconds for sampling, 8.16% slower than the historical conservative run, and still failed numerical qualification. Graph capture remains incompatible with current CPU outputs. Details: [`RTX 3090-class 20-step performance`](rtx3090-20-step-performance.md), [`DiT WebGPU profiling`](dit-webgpu-profiling.md), and the [`complete optimized run`](benchmarks/2026-07-18-flow20-fp32-webgpu-optimization-all.json).
 
 ## Experiments and outcomes
 
@@ -36,6 +36,8 @@ The quality path must therefore remain 20 steps while performance work targets t
 | Stable RMS rewrite | Comparable unconditional failures | Not causal; not deployed |
 | One representative plus exact multiplicity bias | `0.00092310` | Modest improvement, but adapter parity failed |
 | Sixteen representatives plus `4101/16` bias | `0.00092727` | No further benefit; temporary change reverted |
+| Direct repeated-V bypass | Not run | Rejected before graph build: invocation 7 is not repeated, and invocation-8 RMSE `4.5447353e-5` is slightly worse than canonical ORT `4.5354315e-5` |
+| First context refiner q16 chunks | Unchanged | Exact MPS threshold, but canonical q256 is already above it; CPU ORT and optimized WebGPU remain canonical |
 
 The one-representative ONNX graph closely matched its adapted PyTorch specialization (`5.97e-5` max latent error), but that specialization differed from untouched official PyTorch by `9.29e-4`. The problem is therefore the changed floating-point reduction order, not an ONNX transcription failure in that candidate. Its 1.633 GB sidecar was byte-identical to the canonical sidecar, proving a future specialized graph need not duplicate weights.
 
@@ -56,9 +58,9 @@ A bounded candidate replaced only `context_refiner.0` probability×V accumulatio
 
 1. Keep the canonical graph for both CFG passes; do not add runtime routing for the collapsed candidate.
 2. Preserve the official sampler and public float32 state. Do not tune guidance, schedule, or tolerances to conceal graph error.
-3. Keep collapsed-context support diagnostic-only until it passes untouched-official PyTorch and Chrome/Edge WebGPU gates.
-4. Focus the next bounded investigation inside `context_refiner.0`: Q/K normalization, logits, softmax, value accumulation, and output projection for an exact unconditional invocation.
-5. Prefer a custom fused WebGPU online-softmax/value-accumulation kernel, or another implementation that preserves the official reduction behavior, over additional graph-level token-collapse variants.
+3. Treat collapsed-context and repeated-V routes as rejected unless new evidence changes the untouched-official operation target.
+4. Preserve the captured query geometry. The completed sweep finds exact retained rows at every tested query length from 16 through 4,101, so canonical q256 already selects the full-query MPS path; q16 is rejected as a larger no-op.
+5. Consider a custom controlled 4,101-key probability×V reduction only after ORT or the runtime provides a documented buffer layout. Generic online accumulation and raw packed-buffer WGSL are already rejected.
 6. Qualify any candidate in order: untouched official vs adapted PyTorch, ORT CPU vs official, several unconditional trajectory calls, browser teacher-forced replay, full autoregressive 20-step state, then fixed-camera PLY renders against current WebGPU, Hugging Face, and FAL.
 
 Until those gates pass, the correct product statement is: 20-step WebGPU generation completes and may look acceptable, but it is not yet quality/parity-qualified against the official implementation.

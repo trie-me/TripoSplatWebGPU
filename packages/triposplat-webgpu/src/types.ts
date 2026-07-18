@@ -54,6 +54,11 @@ export interface TripoSplatOptions {
   manifestUrl?: string
   executionProviders?: ExecutionProvider[]
   cache?: CacheBackend
+  /**
+   * Persistent-cache artifacts to prefetch during load(). Omit for every
+   * configured graph. A graph excluded here still downloads on demand if run.
+   */
+  prefetchGraphs?: readonly TripoSplatGraphName[]
   workerUrl?: string | URL
   workerFactory?: () => Worker
   logLevel?: LogLevel
@@ -69,6 +74,13 @@ export interface TripoSplatOptions {
 export interface LoadOptions {
   signal?: AbortSignal
   onProgress?: (progress: LoadProgress) => void
+}
+
+export interface MacMpsFlowBackendOptions {
+  /** Authenticated loopback service, normally http://127.0.0.1:8765/. */
+  serviceUrl: string
+  /** Startup token printed by run_mac_mps_flow_service.py. */
+  token: string
 }
 
 export interface GenerateOptions {
@@ -91,6 +103,12 @@ export interface GenerateOptions {
   onProgress?: (progress: GenerationProgress) => void
   /** Required for raw opaque inputs until a browser BiRefNet graph is configured. */
   inputIsPrepared?: boolean
+  /**
+   * Opt into the exact official fp32 PyTorch/MPS sampler on macOS. DINO, VAE,
+   * octree, and Gaussian decode remain in the browser. When omitted, DiT uses
+   * the portable WebGPU graph.
+   */
+  macMpsFlow?: MacMpsFlowBackendOptions
 }
 
 export type TripoSplatInput =

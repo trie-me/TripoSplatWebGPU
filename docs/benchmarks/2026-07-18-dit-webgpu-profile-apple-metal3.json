@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-07-18",
+  "repositoryControlled": true,
+  "component": "dit_webgpu_profile",
+  "scope": "Paired official teacher-forced invocations 7 and 8; this is not a complete 20-step benchmark.",
+  "runtime": {
+    "name": "onnxruntime-web",
+    "version": "1.27.0",
+    "entrypoint": "onnxruntime-web/webgpu",
+    "executionProvider": "webgpu",
+    "wasmFallback": false
+  },
+  "environment": {
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+    "adapter": {
+      "vendor": "apple",
+      "architecture": "metal-3"
+    },
+    "logicalCpuCores": 16,
+    "deviceMemoryGiBHint": 32,
+    "crossOriginIsolated": false,
+    "timestampQueryFeature": true
+  },
+  "model": {
+    "url": "/models/triposplat/dit_step_webgpu_fp32.onnx",
+    "officialRevision": "a78fa12d06dbf1381ca548bfac32bb68cb8c451d",
+    "graphSha256": "558a52ea5eb0a714ba76e1b273159fe16e473424fe39abb6cc0c4ad65b4bc54d",
+    "sidecarSha256": "eacadf21577a976ce0a635cf8b1bbdb4b2c0cdb9cb55d4d73af87957c1e72023"
+  },
+  "warmupPolicy": "One unprofiled invocation 7, followed by one warmed unprofiled invocation 7, then separately requested profiles for invocations 7 and 8.",
+  "strictGate": {
+    "absoluteTolerance": 0.0001,
+    "relativeTolerance": 0.001,
+    "minimumCosineSimilarity": 0.99999999,
+    "requireEveryValueWithinCombinedTolerance": true
+  },
+  "canonical": {
+    "graphOptimizationLevel": "disabled",
+    "enableGraphCapture": false,
+    "loadMs": 15557.400000095367,
+    "unprofiled": {
+      "warmupInvocation7Ms": 12999.299999952316,
+      "warmedInvocation7Ms": 12993.700000047684
+    },
+    "invocation7": {
+      "inferenceMs": 12609.5,
+      "readbackMs": 0.39999985694885254,
+      "latent": {
+        "maxAbsoluteError": 0.000047326087951660156,
+        "meanAbsoluteError": 0.0000017943525010277739,
+        "rmse": 0.0000023755500407035542,
+        "cosineSimilarity": 0.9999999999978236,
+        "fractionWithinTolerance": 1,
+        "passed": true
+      },
+      "cameraPassed": true
+    },
+    "invocation8": {
+      "inferenceMs": 12692.799999952316,
+      "readbackMs": 0.09999990463256836,
+      "latent": {
+        "maxAbsoluteError": 0.0008442432153970003,
+        "meanAbsoluteError": 0.00005393462735536758,
+        "rmse": 0.00007077044059907788,
+        "cosineSimilarity": 0.9999999980984955,
+        "fractionWithinTolerance": 0.9958419799804688,
+        "passed": false
+      },
+      "cameraPassed": true
+    }
+  },
+  "graphOptimizationAll": {
+    "graphOptimizationLevel": "all",
+    "enableGraphCapture": false,
+    "loadMs": 10251.399999856949,
+    "unprofiled": {
+      "warmupInvocation7Ms": 12028.100000143051,
+      "warmedInvocation7Ms": 11844.300000190735
+    },
+    "invocation7": {
+      "inferenceMs": 12406.599999904633,
+      "readbackMs": 0.3000001907348633,
+      "latent": {
+        "maxAbsoluteError": 0.00004839897155761719,
+        "meanAbsoluteError": 0.0000017982404559857557,
+        "rmse": 0.0000023705966463956556,
+        "cosineSimilarity": 0.9999999999978172,
+        "fractionWithinTolerance": 1,
+        "passed": true
+      },
+      "cameraPassed": true
+    },
+    "invocation8": {
+      "inferenceMs": 12679.600000143051,
+      "readbackMs": 0.09999990463256836,
+      "latent": {
+        "maxAbsoluteError": 0.0008309667464345694,
+        "meanAbsoluteError": 0.0000539209430014953,
+        "rmse": 0.00007073321853021876,
+        "cosineSimilarity": 0.9999999981004899,
+        "fractionWithinTolerance": 0.9958953857421875,
+        "passed": false
+      },
+      "cameraPassed": true
+    },
+    "relativeToCanonical": {
+      "loadTimeReductionPercent": 34.10595600939676,
+      "warmedInvocation7WallTimeReductionPercent": 8.84582528342759
+    },
+    "promotionDecision": "no-go-pending-full-20-step-gate"
+  },
+  "webgpuProfiling": {
+    "configuredBeforeSessionCreation": true,
+    "traceConfiguredSeparately": true,
+    "profileRequestedSeparatelyForInvocation7AndInvocation8": true,
+    "timestampQuerySupported": true,
+    "recordCount": 0,
+    "dispatchCount": 0,
+    "availability": "no-records",
+    "profileOverheadReported": false,
+    "interpretation": "The installed ONNX Runtime 1.27 native WebGPU EP accepted the diagnostic configuration but did not emit env.webgpu.profiling.ondata records. Zero is not interpreted as zero GPU time."
+  },
+  "graphCapture": {
+    "graphOptimizationLevel": "all",
+    "enableGraphCapture": true,
+    "result": "rejected-before-inference",
+    "error": "Not supported preferred output location: cpu. Only 'gpu-buffer' location is supported when enableGraphCapture is true.",
+    "promotionDecision": "no-go-with-current-cpu-output-contract"
+  },
+  "decision": {
+    "keepTwentyStepFortyCallQualityPath": true,
+    "keepCanonicalGraphOptimizationDisabled": true,
+    "keepGraphCaptureDisabled": true,
+    "promoteProductionChange": false,
+    "reason": "The optimization-level A/B is promising but has not passed the complete unchanged 20-step trajectory gate; graph capture is incompatible with current CPU outputs; kernel records were unavailable."
+  }
+}

@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-07-18",
+  "repositoryControlled": true,
+  "stage": "TripoSplat 20-step fp32 CFG/Euler flow loop with ORT graph optimization all",
+  "passed": false,
+  "strictPassed": false,
+  "artifact": {
+    "graph": "public/models/triposplat/dit_step_webgpu_fp32.onnx",
+    "graphBytes": 10685614,
+    "graphSha256": "558a52ea5eb0a714ba76e1b273159fe16e473424fe39abb6cc0c4ad65b4bc54d",
+    "sidecarBytes": 1633210368,
+    "sidecarSha256": "eacadf21577a976ce0a635cf8b1bbdb4b2c0cdb9cb55d4d73af87957c1e72023",
+    "transferBytes": 1643895982
+  },
+  "fixture": {
+    "directory": "public/fixtures/generated/flow20-fp32-compute",
+    "sourceCommit": "a78fa12d06dbf1381ca548bfac32bb68cb8c451d",
+    "internalPrecision": "fp32"
+  },
+  "environment": {
+    "hardware": "Apple M3 Max, 128 GB unified memory",
+    "browser": "Chrome 150.0.0.0",
+    "adapterVendor": "apple",
+    "adapterArchitecture": "metal-3",
+    "executionProvider": "webgpu",
+    "onnxruntimeWebVersion": "1.27.0",
+    "crossOriginIsolated": false,
+    "wasmFallbackAllowed": false
+  },
+  "settings": {
+    "steps": 20,
+    "guidanceScale": 3,
+    "shift": 3,
+    "predictionArithmetic": "float32",
+    "conditionalInvocations": 20,
+    "unconditionalInvocations": 20,
+    "graphOptimizationLevel": "all",
+    "graphCapture": false
+  },
+  "timingsMs": {
+    "modelLoad": 9552,
+    "summedInference": 731760.2999989986,
+    "summedReadback": 2.8000006675720215,
+    "samplingWall": 731902.899999857
+  },
+  "execution": {
+    "completed": true,
+    "webgpuInvocations": 40,
+    "fallbackUsed": false,
+    "webGpuContextLost": false
+  },
+  "qualification": {
+    "tolerance": {
+      "absolute": 0.005,
+      "relative": 0.003,
+      "minimumCosineSimilarity": 0.99999998
+    },
+    "latent": {
+      "maxAbsoluteError": 0.04832100868225098,
+      "meanAbsoluteError": 0.00032089981225968955,
+      "rmse": 0.000748286228633378,
+      "cosineSimilarity": 0.999999710720703,
+      "fractionWithinTolerance": 0.9986495971679688,
+      "passed": false
+    },
+    "camera": {
+      "maxAbsoluteError": 0.00011520087718963623,
+      "meanAbsoluteError": 0.00005561113357543945,
+      "rmse": 0.00006634714335965347,
+      "cosineSimilarity": 0.9999999844481299,
+      "fractionWithinTolerance": 1,
+      "passed": true
+    },
+    "passed": false
+  },
+  "strictDiagnostic": {
+    "tolerance": {
+      "absolute": 0.0001,
+      "relative": 0.001,
+      "minimumCosineSimilarity": 0.99999999
+    },
+    "latentFractionWithinTolerance": 0.8517227172851562,
+    "cameraFractionWithinTolerance": 0.8,
+    "passed": false
+  },
+  "historicalDisabledComparison": {
+    "source": "docs/benchmarks/2026-07-15-flow20-fp32-webgpu.json",
+    "caveat": "Separate single-machine runs; sustained timing includes thermal and run-to-run variance.",
+    "modelLoadReductionPercent": 23.645083932853716,
+    "summedInferenceIncreasePercent": 8.164481604796348,
+    "samplingWallIncreasePercent": 8.162601188650576,
+    "latentMaxErrorReductionPercent": 0.797106237594927,
+    "latentMeanErrorReductionPercent": 8.76192222908937,
+    "latentRmseReductionPercent": 7.852407399778135
+  },
+  "decision": {
+    "status": "no-go",
+    "productionSessionPolicyChanged": false,
+    "reason": "All 40 calls completed, but the unchanged qualification and strict gates still fail. The session loaded faster, while sustained 40-call inference and wall time were slower than the historical disabled run. A one-call timing improvement did not generalize to this full Mac workload."
+  },
+  "limitations": [
+    "This is a single-machine, single-run browser measurement.",
+    "The disabled comparison is historical rather than an immediately paired thermal-state run.",
+    "No peak-memory result is reported because browser WebGPU exposes no model-only peak allocation measurement.",
+    "The target 16 GB Apple Silicon configuration, Microsoft Edge, and complete target-NVIDIA A/B remain unvalidated."
+  ]
+}

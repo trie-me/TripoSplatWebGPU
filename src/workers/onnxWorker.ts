@@ -3,6 +3,10 @@
 import * as ort from 'onnxruntime-web/webgpu'
 
 import {
+  summarizeWebGpuProfiling,
+  type WebGpuProfilingRecord,
+} from '../../packages/triposplat-webgpu/src/profiling'
+import {
   CONTEXT0_ATTENTION_BYTES,
   CONTEXT0_ATTENTION_SHAPE,
   createContext0AttentionExecutor,
@@ -73,6 +77,24 @@ interface Context0SplitRecord {
 const sessions = new Map<string, SessionRecord>()
 const context0Splits = new Map<string, Context0SplitRecord>()
 let runtimeConfiguration: OrtConfigureRuntimeResult | undefined
+let profilingRecords: WebGpuProfilingRecord[] = []
+let profilingRunTail = Promise.resolve()
+
+function timestampQuerySupported(): boolean {
+  const adapter = ort.env.webgpu.adapter as { features?: ReadonlySet<string> } | undefined
+  const device = ort.env.webgpu.device as { features?: ReadonlySet<string> } | undefined
+  const features = device?.features ?? adapter?.features
+  return features?.has('timestamp-query') === true
+    || features?.has('chromium-experimental-timestamp-query-inside-passes') === true
+}
+
+async function awaitProfilingCallbacks(): Promise<void> {
+  const device = ort.env.webgpu.device as {
+    queue?: { onSubmittedWorkDone?(): Promise<void> }
+  } | undefined
+  await device?.queue?.onSubmittedWorkDone?.()
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+}
 
 function serializeError(error: unknown): SerializedWorkerError {
   if (error instanceof Error) {
@@ -149,6 +171,8 @@ function defaultRuntimeConfiguration(): OrtConfigureRuntimeResult {
       mjs: new URL('ort-wasm-simd-threaded.asyncify.mjs', baseUrl).href,
       wasm: new URL('ort-wasm-simd-threaded.asyncify.wasm', baseUrl).href,
     },
+    trace: false,
+    webgpuProfiling: false,
   }
 }
 
@@ -190,7 +214,13 @@ function normalizeRuntimeConfiguration(configuration: OrtRuntimeConfiguration): 
     }
   }
 
-  return { wasmThreads, wasmSimd, wasmPaths }
+  return {
+    wasmThreads,
+    wasmSimd,
+    wasmPaths,
+    trace: configuration.trace ?? defaults.trace,
+    webgpuProfiling: configuration.webgpuProfiling ?? defaults.webgpuProfiling,
+  }
 }
 
 function configureRuntime(
@@ -209,6 +239,27 @@ function configureRuntime(
   ort.env.wasm.numThreads = normalized.wasmThreads
   ort.env.wasm.simd = normalized.wasmSimd
   ort.env.wasm.wasmPaths = normalized.wasmPaths
+  ort.env.trace = normalized.trace
+  if (normalized.webgpuProfiling) {
+    ort.env.webgpu.profiling = {
+      mode: 'off',
+      ondata: (record) => {
+        profilingRecords.push({
+          ...record,
+          inputsMetadata: record.inputsMetadata.map((value) => ({
+            dims: Array.from(value.dims),
+            dataType: value.dataType,
+          })),
+          outputsMetadata: record.outputsMetadata.map((value) => ({
+            dims: Array.from(value.dims),
+            dataType: value.dataType,
+          })),
+        })
+      },
+    }
+  } else {
+    ort.env.webgpu.profiling = { mode: 'off' }
+  }
   runtimeConfiguration = normalized
   postStatus('runtime-ready', 'ONNX Runtime is configured.', requestId)
   return normalized
@@ -519,7 +570,8 @@ async function runContext0Split(
   const record = context0Splits.get(request.sessionId)
   if (!record || record.disposed) throw new Error(`Context0 split '${request.sessionId}' is not loaded.`)
   postStatus('inference-queued', `Queued Context0 split inference for '${request.sessionId}'.`, requestId, request.sessionId, 'webgpu')
-  return enqueueSessionRun(record, async () => {
+  return enqueueDiagnosticSessionRun(record, async () => {
+    ort.env.webgpu.profiling.mode = 'off'
     if (record.disposed) throw new Error(`Context0 split '${request.sessionId}' was disposed before inference started.`)
     const loaded = await record.loading
     const requestedOutputs = request.outputs === undefined ? undefined : Array.from(request.outputs)
@@ -655,6 +707,18 @@ function enqueueSessionRun<T>(record: { runTail: Promise<void> }, task: () => Pr
   return result
 }
 
+function enqueueDiagnosticSessionRun<T>(
+  record: { runTail: Promise<void> },
+  task: () => Promise<T>,
+): Promise<T> {
+  if (!runtimeConfiguration?.webgpuProfiling) return enqueueSessionRun(record, task)
+  const ready = Promise.all([record.runTail, profilingRunTail])
+  const result = ready.then(task)
+  record.runTail = result.then(() => undefined, () => undefined)
+  profilingRunTail = record.runTail
+  return result
+}
+
 async function runSession(request: OrtRunSessionRequest, requestId: string): Promise<OrtRunSessionResult> {
   assertSessionId(request.sessionId)
   assertTensorPayloadMap(request.inputs, 'request.inputs')
@@ -664,11 +728,21 @@ async function runSession(request: OrtRunSessionRequest, requestId: string): Pro
   }
 
   postStatus('inference-queued', `Queued inference for '${request.sessionId}'.`, requestId, request.sessionId)
-  return enqueueSessionRun(record, async () => {
+  return enqueueDiagnosticSessionRun(record, async () => {
     if (record.disposed) {
       throw new Error(`ONNX session '${request.sessionId}' was disposed before inference started.`)
     }
     const loaded = await record.loading
+    const profileWebGpu = request.profileWebGpu === true
+    if (profileWebGpu && !runtimeConfiguration?.webgpuProfiling) {
+      throw new Error(
+        'WebGPU profiling was not configured before session creation. ' +
+          'Create this lab worker with runtime.webgpuProfiling enabled.',
+      )
+    }
+    ort.env.webgpu.profiling.mode = profileWebGpu ? 'default' : 'off'
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    const profilingStart = profilingRecords.length
     const requestedOutputs = request.outputs === undefined ? undefined : Array.from(request.outputs)
     if (requestedOutputs) {
       const available = new Set(loaded.session.outputNames)
@@ -742,6 +816,17 @@ async function runSession(request: OrtRunSessionRequest, requestId: string): Pro
       }
     }))
     const outputs = Object.fromEntries(outputEntries) as TensorPayloadMap
+    if (profileWebGpu) await awaitProfilingCallbacks()
+    const profileRecords = profileWebGpu
+      ? profilingRecords.slice(profilingStart)
+      : undefined
+    const profileSummary = profileRecords === undefined
+      ? undefined
+      : summarizeWebGpuProfiling(profileRecords)
+    const supportsTimestamps = timestampQuerySupported()
+    if (profilingRecords.length > 1_000_000) {
+      profilingRecords = profilingRecords.slice(profilingStart)
+    }
     const readbackMs = performance.now() - readbackStartedAt
     const totalMs = performance.now() - totalStartedAt
     postStatus(
@@ -756,6 +841,26 @@ async function runSession(request: OrtRunSessionRequest, requestId: string): Pro
       sessionId: request.sessionId,
       outputs,
       timings: { inferenceMs, readbackMs, totalMs },
+      ...(profileRecords === undefined
+        ? {}
+        : {
+            profile: {
+              requested: true,
+              availability: profileRecords.length > 0
+                ? 'available'
+                : supportsTimestamps
+                  ? 'no-records'
+                  : 'timestamp-query-unavailable',
+              timestampQuerySupported: supportsTimestamps,
+              records: profileRecords,
+              summary: profileSummary!,
+              inferenceWallMs: inferenceMs,
+              unaccountedWallMs: Math.max(
+                0,
+                inferenceMs - profileSummary!.summedGpuKernelMs,
+              ),
+            },
+          }),
     }
   })
 }

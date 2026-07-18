@@ -6,6 +6,7 @@
 
 [![Package validation](https://github.com/yosun/TripoSplatWebGPU/actions/workflows/package-validation.yml/badge.svg)](https://github.com/yosun/TripoSplatWebGPU/actions/workflows/package-validation.yml)
 ![WebGPU required](https://img.shields.io/badge/WebGPU-required-4285F4)
+[![Hugging Face V2](https://img.shields.io/badge/🤗%20Hugging%20Face-V2%20exact%2020--step-FFD21E)](https://huggingface.co/spaces/Yosun/TripoSplat-WebGPU-v2)
 [![Hugging Face Space](https://img.shields.io/badge/🤗%20Hugging%20Face-browser--local%20demo-FFD21E)](https://huggingface.co/spaces/Yosun/TripoSplat-WebGPU-Demo)
 [![Vercel demo](https://img.shields.io/badge/Vercel-browser--local%20demo-c6ff4a?logo=vercel&logoColor=black)](https://triposplat-webgpu.vercel.app/e2e-web)
 <a href="https://www.producthunt.com/products/triposplat-webgpu?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-triposplat-webgpu" target="_blank" rel="noopener noreferrer"><img alt="TripoSplat WebGPU - Image to 3D Model: Offline. Local. Portable. | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1198682&amp;theme=light&amp;t=1784320164461"></a>
@@ -14,6 +15,7 @@ A working, browser-local WebGPU engineering preview of [TripoSplat](https://gith
 
 ## Try the browser-local demos
 
+- **[Hugging Face V2 exact Mac runner](https://huggingface.co/spaces/Yosun/TripoSplat-WebGPU-v2)** — qualified 20-step runner using the authenticated local fp32 MPS sampler.
 - **[Hugging Face Space](https://huggingface.co/spaces/Yosun/TripoSplat-WebGPU-Demo)** — static Vite demo, with no Hugging Face inference compute.
 - **[Vercel runner](https://triposplat-webgpu.vercel.app/e2e-web)** — public browser runner; [`/e2e-lab.html`](https://triposplat-webgpu.vercel.app/e2e-lab) is the fixture-driven qualification surface.
 
@@ -39,7 +41,8 @@ The current runner source accepts PNG, WebP, JPEG, and AVIF. Alpha-bearing image
 
 - Use desktop Chrome with WebGPU. The only recorded qualification environment is Chrome 150 on an Apple M3 Max with 128 GB unified memory; Edge, 16 GB Apple Silicon, Safari, Firefox, and Windows GPUs are not yet qualified.
 - Allow roughly 6.47 GB for the first verified model download and browser cache. Cache persistence depends on browser storage and quota.
-- The public runner requests 20 sampling steps / 40 CFG DiT calls and can take several minutes on the recorded high-end hardware. That path executes but fails its recorded qualification and strict final-state gates.
+- The portable WebGPU runner requests 20 sampling steps / 40 CFG DiT calls and can take several minutes on the recorded high-end hardware. That path executes but fails its recorded qualification and strict final-state gates.
+- The opt-in Mac-local PyTorch/MPS path now passes the unchanged 20-step fixture bit-for-bit. On the recorded M3 Max it loaded in 2.25 seconds and sampled in 347.09 seconds, versus 676.67 seconds for the historical conservative WebGPU run.
 
 This is an engineering preview, not a production or broad-hardware support claim. The four-step prepared-image path has a structural/export/viewer pass but misses a stricter diagnostic; official whole-scene and rendered-pixel parity, repeated full-generation memory behavior, and production CDN/OPFS qualification remain open. See [Current status](docs/current-status.md) before integrating or benchmarking.
 
@@ -54,6 +57,16 @@ pnpm dev
 ```
 
 Open `http://localhost:<PORT>/e2e-web.html`. Test inputs and recorded outputs are stored in [`public/_testers`](https://github.com/yosun/TripoSplatWebGPU/tree/main/public/_testers).
+
+### Exact 20-step Mac path
+
+The Mac launcher keeps DINO, VAE, octree, Gaussian decoding, exports, and the viewer in the browser, but runs all 40 DiT/CFG/Euler invocations through the untouched official fp32 PyTorch sampler on local MPS. It requires the official checkout, weights, and Python environment; the defaults below match this repository's recorded Mac validation environment.
+
+```bash
+scripts/triposplat/start_mac_20_step.sh
+```
+
+The launcher prints the authenticated runner URL. The token is accepted once, moved into tab-scoped session storage, and removed from the address bar. Override dependency locations with `TRIPOSPLAT_PYTHON`, `TRIPOSPLAT_OFFICIAL_REPO`, and `TRIPOSPLAT_FLOW_WEIGHTS`.
 
 ## Hugging Face Space deployment
 
@@ -75,7 +88,7 @@ hf repos cp huggingface-space/README.md \
 Upload the Space card after the bundle because `dist/` does not contain `README.md`. Do not upload local model artifacts, credentials, caches, or uncommitted experiment files. Hugging Face may require a paid plan or account credits to activate updated Static Space hosting; check current Spaces pricing before deployment.
 
 
-> **Current milestone, not a production release.** The alpha `@ai3d/triposplat-webgpu` workspace package contains the five-stage browser executor and a complete 6.465 GB fp32 manifest. A measured prepared-image run now completes the entire packaged browser path, exports 262,144 finite Gaussians, and loads the PLY into the retained browser viewer with a live canvas. DINOv3, Flux VAE, one DiT invocation, the full eight-level octree trajectory, and the raw Gaussian decoder boundary also pass their recorded Chrome/WebGPU gates. The four-step loop passes its qualification envelope but misses a stricter diagnostic; the measured 20-step loop fails its final-state gate. Official whole-scene/render parity, bundled BiRefNet, Edge/16 GB qualification, and production memory measurements remain release blockers. See [Current status](docs/current-status.md) before integrating or benchmarking this work.
+> **Current milestone, not a production release.** The alpha `@ai3d/triposplat-webgpu` workspace package contains the five-stage browser executor and a complete 6.465 GB fp32 manifest. A measured prepared-image run completes the packaged browser path, exports 262,144 finite Gaussians, and loads the PLY into the retained browser viewer. The portable WebGPU 20-step loop still fails its final-state gate; the opt-in Mac MPS sampler now passes the same fixture bit-for-bit and is the qualified Mac quality path. Official whole-scene/render parity, bundled BiRefNet, Edge/16 GB qualification, and production memory measurements remain release blockers. See [Current status](docs/current-status.md) before integrating or benchmarking this work.
 
 ## Verified status
 
@@ -86,6 +99,7 @@ Upload the Space card after the bundle because `dist/` does not contain `README.
 | One exported fp32 DiT invocation | **STRICT PASS** against untouched official PyTorch | [DiT WebGPU validation](docs/validation/2026-07-15-dit-step-webgpu-fp32-chrome.json) |
 | Four-step CFG/Euler browser loop | Eight calls complete; **qualification PASS, strict diagnostic FAIL** | [Four-step benchmark](docs/benchmarks/2026-07-15-flow4-fp32-webgpu.json) |
 | Twenty-step guided sampling | Forty calls complete; **qualification and strict FAIL** | [Twenty-step benchmark](docs/benchmarks/2026-07-15-flow20-fp32-webgpu.json) |
+| Twenty-step guided sampling on Mac MPS | **BIT-EXACT PASS**; qualification and strict gates pass with zero error | [Mac MPS service validation](docs/validation/2026-07-18-flow20-mac-mps-service.json) |
 | Eight-level fp32 octree trajectory | **PASS** for logits, padding independence, resampling, and final points | [Octree trajectory validation](docs/validation/2026-07-15-octree-trajectory-webgpu-fp32-chrome.json) |
 | fp32 Gaussian feature decoder | **PASS** on WebGPU for raw `[1,8192,480]` features | [Gaussian decoder WebGPU benchmark](docs/benchmarks/2026-07-14-gaussian-decoder-webgpu.json); final scene parity remains open |
 | Packaged prepared-image end-to-end path | **STRUCTURAL/VIEWER PASS**: all five stages, 262,144 finite Gaussians, PLY and `.splat` export, ready viewer canvas | [End-to-end viewer benchmark](docs/benchmarks/2026-07-15-e2e-render-structural-webgpu-fp32-chrome.json); whole-scene numerical/render parity is not claimed |
@@ -101,7 +115,8 @@ Upload the Space card after the bundle because `dist/` does not contain `README.
 
 - **The packaged browser-local pipeline works end to end at the structural level.** The recorded prepared-image run completed DINOv3, Flux VAE, eight DiT calls, eight octree levels, Gaussian decoding, PLY/`.splat` export, and viewer loading. It produced 262,144 finite Gaussians. This is a structural/export/viewer pass, not a whole-scene numerical or rendered-pixel parity claim.
 - **The isolated fp32 stages are strongly validated on the recorded fixture.** DINOv3, Flux VAE, one DiT invocation, the complete eight-level octree trajectory, and the raw Gaussian decoder pass their declared browser gates. The four-step CFG/Euler loop completes and passes its qualification envelope, while still failing the separately recorded stricter latent diagnostic.
-- **The canonical 20-step path completes but is not parity-qualified.** All 40 WebGPU DiT calls finish without fallback, but accumulated latent drift fails both qualification and strict final-state gates (`0.0487093` maximum absolute error; `0.9999996593` cosine similarity). A community RTX 3090-class warm-OPFS report completed in 7m 52s, with 5m 2s in DiT inference and only 7ms in DiT readback; the same user found 20-step output visibly acceptable while four steps was too low quality. See the [field analysis and optimization direction](docs/rtx3090-20-step-performance.md).
+- **The Mac 20-step path is bit-exact and materially faster.** The authenticated loopback service uses untouched official fp32 PyTorch/MPS for all 40 flow calls. On the recorded M3 Max, final latent/camera hashes match exactly, both gates pass with zero error, model load is 2.25 seconds, and sampling is 347.09 seconds. The browser skips the 1.64 GB DiT artifact on this path.
+- **The portable WebGPU 20-step fallback completes but is not parity-qualified.** All 40 WebGPU DiT calls finish without fallback, but accumulated latent drift fails both qualification and strict final-state gates (`0.0487093` maximum absolute error; `0.9999996593` cosine similarity). A community RTX 3090-class warm-OPFS report completed in 7m 52s, with 5m 2s in DiT inference and only 7ms in DiT readback; the same user found 20-step output visibly acceptable while four steps was too low quality. See the [field analysis and optimization direction](docs/rtx3090-20-step-performance.md).
 - **The remaining DiT discrepancy has been localized.** The first material conditional/unconditional split occurs in `context_refiner.0` attention at probability×V accumulation on the all-zero unconditional branch. ONNX Runtime CPU reproduces the initiating discrepancy, so it is not WebGPU-only; WebGPU introduces additional separation. The official sampler, CFG/Euler arithmetic, standalone octree, and standalone Gaussian decoder are not implicated as the initiating cause.
 - **The best bounded reduction candidate was a no-go.** K=256 probability×V chunking improved complete 20-step max/mean/RMSE error by approximately 14.6%/31.5%/30.3%, but remained outside tolerance, ran slower, and lacked a controlled paired visual comparison. The canonical graph and manifest therefore remain unchanged.
 - **The evidence is deliberately narrow.** Headline measurements come from Chrome 150 with ONNX Runtime WebGPU 1.27 on one Apple M3 Max with 128 GB unified memory. Edge, 16 GB Apple Silicon, other Apple and Windows GPUs, Safari, Firefox, repeated-generation behavior, and peak WebGPU/unified-memory use remain unqualified.
@@ -155,6 +170,7 @@ The development server exposes a public runner and engineering validation surfac
 - `/sharp-lab.html` — preserved legacy SHARP application path;
 - `/encoder-lab.html` — preprocessing and encoder vertical-slice comparison;
 - `/dit-lab.html` — one DiT invocation against a deterministic PyTorch fixture;
+- `/dit-profile-lab.html` — opt-in warmed invocation-7/invocation-8 profiling and graph-optimization/capture A/B;
 - `/flow-lab.html` — four-step CFG/Euler execution and final-state comparison;
 - `/octree-lab.html` — one fp32 occupancy-logit invocation or full eight-level trajectory replay;
 - `/gaussian-lab.html` — one fp32 raw Gaussian-feature invocation.

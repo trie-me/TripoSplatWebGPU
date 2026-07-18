@@ -46,6 +46,7 @@ export default defineConfig({
         encoderLab: 'encoder-lab.html',
         dinoLab: 'dino-lab.html',
         ditLab: 'dit-lab.html',
+        ditProfileLab: 'dit-profile-lab.html',
         flowLab: 'flow-lab.html',
         octreeLab: 'octree-lab.html',
         gaussianLab: 'gaussian-lab.html',

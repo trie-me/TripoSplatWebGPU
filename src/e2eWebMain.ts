@@ -17,6 +17,7 @@ import {
   type CompatibilityReport,
   type GenerationProgress,
   type LoadProgress,
+  type MacMpsFlowBackendOptions,
 } from '../packages/triposplat-webgpu/dist/index.js'
 import { SplatPreview, type SplatPreviewStatus } from './components/SplatPreview'
 
@@ -25,6 +26,48 @@ const MODEL_LARGEST_ARTIFACT_BYTES = 3_362_042_880
 const DEFAULT_MODEL_BASE = 'https://huggingface.co/Yosun/TripoSplat-WebGPU/resolve/main/triposplat-webgpu/0.1.0-fp32.20260715/'
 const DEFAULT_STEPS = 20
 const ACTIVE_RUN_STORAGE_KEY = 'triposplat.active-run.v1'
+const MPS_FLOW_STORAGE_KEY = 'triposplat.mac-mps-flow.v1'
+const REQUIRE_MAC_MPS_FLOW = import.meta.env.VITE_TRIPOSPLAT_RUNNER_MODE === 'mac-mps-required'
+const OFFICIAL_FLOW_COMMIT = 'a78fa12d06dbf1381ca548bfac32bb68cb8c451d'
+
+function configuredMacMpsFlow(): MacMpsFlowBackendOptions | undefined {
+  const parameters = new URLSearchParams(location.search)
+  const serviceUrl = parameters.get('mpsService')
+  const token = parameters.get('mpsToken')
+  if ((serviceUrl === null) !== (token === null)) {
+    console.warn('The Mac MPS path requires both mpsService and mpsToken query parameters.')
+    return undefined
+  }
+  if (serviceUrl !== null && token !== null) {
+    const configuration = { serviceUrl, token }
+    sessionStorage.setItem(MPS_FLOW_STORAGE_KEY, JSON.stringify(configuration))
+    parameters.delete('mpsService')
+    parameters.delete('mpsToken')
+    const query = parameters.toString()
+    history.replaceState(null, '', `${location.pathname}${query ? `?${query}` : ''}${location.hash}`)
+    return configuration
+  }
+  const saved = sessionStorage.getItem(MPS_FLOW_STORAGE_KEY)
+  if (saved === null) return undefined
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(saved)
+  } catch {
+    sessionStorage.removeItem(MPS_FLOW_STORAGE_KEY)
+    return undefined
+  }
+  if (
+    !isRecord(parsed)
+    || typeof parsed.serviceUrl !== 'string'
+    || typeof parsed.token !== 'string'
+  ) {
+    sessionStorage.removeItem(MPS_FLOW_STORAGE_KEY)
+    return undefined
+  }
+  return { serviceUrl: parsed.serviceUrl, token: parsed.token }
+}
+
+const MAC_MPS_FLOW = configuredMacMpsFlow()
 
 type FlowStage = 'source' | 'model' | 'conditioning' | 'sampling' | 'decode' | 'preview'
 type ProgressDetailMode = 'guided' | 'technical'
@@ -126,6 +169,12 @@ const sourcePanel = requiredElement<HTMLElement>('.web-controls')
 const modelBaseInput = requiredElement<HTMLInputElement>('#model-base')
 const modelStatus = requiredElement<HTMLElement>('#model-status')
 const cacheMode = requiredElement<HTMLElement>('#cache-mode')
+const mpsConnection = requiredElement<HTMLElement>('#mps-connection')
+const mpsConnectionBadge = requiredElement<HTMLElement>('#mps-connection-badge')
+const mpsConnectionStatus = requiredElement<HTMLElement>('#mps-connection-status')
+const mpsServiceUrlInput = requiredElement<HTMLInputElement>('#mps-service-url')
+const mpsServiceTokenInput = requiredElement<HTMLInputElement>('#mps-service-token')
+const mpsConnectButton = requiredElement<HTMLButtonElement>('#mps-connect')
 const generateButton = requiredElement<HTMLButtonElement>('#generate')
 const cancelButton = requiredElement<HTMLButtonElement>('#cancel')
 const clearCacheButton = requiredElement<HTMLButtonElement>('#clear-cache')
@@ -193,6 +242,73 @@ let latestRunStatus: RunStatusSnapshot = {
 }
 const retiredPlyUrls = new Set<string>()
 
+function renderMpsConnection(): void {
+  if (MAC_MPS_FLOW === undefined) {
+    mpsConnection.dataset.state = 'idle'
+    mpsConnectionBadge.textContent = 'NOT CONNECTED'
+    mpsConnectionStatus.dataset.state = 'idle'
+    mpsConnectionStatus.textContent = REQUIRE_MAC_MPS_FLOW
+      ? 'V2 requires the authenticated local Mac service before generation.'
+      : 'Connect for the bit-exact 20-step Mac path, or leave disconnected to use WebGPU.'
+    mpsConnectButton.textContent = 'Connect exact 20-step engine'
+    return
+  }
+  mpsConnection.dataset.state = 'ready'
+  mpsConnectionBadge.textContent = 'EXACT MPS READY'
+  mpsConnectionStatus.dataset.state = 'ready'
+  mpsConnectionStatus.textContent = `Configured ${MAC_MPS_FLOW.serviceUrl}. The browser will skip the WebGPU DiT artifact.`
+  mpsServiceUrlInput.value = MAC_MPS_FLOW.serviceUrl
+  mpsServiceTokenInput.value = ''
+  mpsServiceUrlInput.disabled = true
+  mpsServiceTokenInput.disabled = true
+  mpsConnectButton.textContent = 'Disconnect Mac MPS'
+}
+
+async function connectMacMpsFlow(): Promise<void> {
+  if (MAC_MPS_FLOW !== undefined) {
+    sessionStorage.removeItem(MPS_FLOW_STORAGE_KEY)
+    location.reload()
+    return
+  }
+  const serviceUrl = mpsServiceUrlInput.value.trim()
+  const token = mpsServiceTokenInput.value
+  if (token.length < 16) throw new Error('Paste the startup token printed by the Mac launcher.')
+  let base: URL
+  try {
+    base = new URL(serviceUrl)
+  } catch {
+    throw new Error('Enter the complete local service URL.')
+  }
+  if (
+    !['http:', 'https:'].includes(base.protocol)
+    || !['127.0.0.1', 'localhost', '[::1]'].includes(base.hostname)
+  ) {
+    throw new Error('The exact sampler service must use a loopback HTTP address.')
+  }
+  if (!base.pathname.endsWith('/')) base.pathname += '/'
+  mpsConnection.dataset.state = 'working'
+  mpsConnectionBadge.textContent = 'CHECKING'
+  mpsConnectionStatus.dataset.state = 'working'
+  mpsConnectionStatus.textContent = 'Checking the local model revision, precision, and readiness…'
+  const response = await fetch(new URL('v1/health', base), { mode: 'cors', cache: 'no-store' })
+  if (!response.ok) throw new Error(`The local Mac service returned HTTP ${response.status}.`)
+  const health: unknown = await response.json()
+  if (
+    !isRecord(health)
+    || health.ready !== true
+    || health.device !== 'mps'
+    || health.precision !== 'fp32'
+    || health.sourceCommit !== OFFICIAL_FLOW_COMMIT
+  ) {
+    throw new Error('The local service is not the qualified official fp32 MPS sampler.')
+  }
+  sessionStorage.setItem(MPS_FLOW_STORAGE_KEY, JSON.stringify({
+    serviceUrl: base.href,
+    token,
+  }))
+  location.reload()
+}
+
 function formatBytes(bytes: number): string {
   if (bytes < 1_024) return `${bytes} B`
   if (bytes < 1_024 ** 2) return `${(bytes / 1_024).toFixed(1)} KiB`
@@ -210,7 +326,10 @@ function isMobilePlatform(): boolean {
   return /iPhone|iPad|iPod|Android.*Mobile|Mobile.*Android/i.test(userAgent) || iPadDesktopMode
 }
 
-function summarizeModelManifest(value: unknown): ModelManifestSummary {
+function summarizeModelManifest(
+  value: unknown,
+  omittedGraphs: ReadonlySet<string> = new Set(),
+): ModelManifestSummary {
   if (!isRecord(value) || !isRecord(value.graphs)) throw new Error('The model manifest is missing its graph declarations.')
   const identity = [value.name, value.version, value.modelRevision, value.precision]
   if (!identity.every((part) => typeof part === 'string' && part.length > 0)) {
@@ -222,6 +341,7 @@ function summarizeModelManifest(value: unknown): ModelManifestSummary {
   for (const graphName of requiredGraphs) {
     const graph = value.graphs[graphName]
     if (!isRecord(graph)) throw new Error(`The model manifest is missing the required '${graphName}' graph.`)
+    if (omittedGraphs.has(graphName)) continue
     const lengths: unknown[] = [graph.byteLength]
     if (graph.externalData !== undefined && !Array.isArray(graph.externalData)) {
       throw new Error(`The '${graphName}' graph has an invalid external-data declaration.`)
@@ -242,7 +362,9 @@ function summarizeModelManifest(value: unknown): ModelManifestSummary {
   if (estimatedBytes !== undefined && (!Number.isSafeInteger(estimatedBytes) || (estimatedBytes as number) <= 0)) {
     throw new Error('The model manifest contains an invalid estimated model size.')
   }
-  const declaredBytes = Math.max(summedBytes, typeof estimatedBytes === 'number' ? estimatedBytes : 0)
+  const declaredBytes = omittedGraphs.size === 0
+    ? Math.max(summedBytes, typeof estimatedBytes === 'number' ? estimatedBytes : 0)
+    : summedBytes
   return {
     namespace: identity.join('/'),
     declaredBytes,
@@ -793,6 +915,9 @@ function setBusy(next: boolean): void {
   modelBaseInput.disabled = next
   imageUrlInput.disabled = next
   clearCacheButton.disabled = next
+  mpsServiceUrlInput.disabled = next || MAC_MPS_FLOW !== undefined
+  mpsServiceTokenInput.disabled = next || MAC_MPS_FLOW !== undefined
+  mpsConnectButton.disabled = next
   updateGenerateButton()
   updatePrepareImageButton()
 }
@@ -801,7 +926,8 @@ function updateGenerateButton(): void {
   const compatible = compatibility?.supported === true
   const hasModelBase = modelBaseInput.value.trim().length > 0
   const storageReady = storageQualification?.supported === true
-  generateButton.disabled = busy || !compatible || !storageReady || platformRunBlocker !== undefined || !selectedImage || !hasModelBase
+  const exactFlowReady = !REQUIRE_MAC_MPS_FLOW || MAC_MPS_FLOW !== undefined
+  generateButton.disabled = busy || !compatible || !storageReady || platformRunBlocker !== undefined || !selectedImage || !hasModelBase || !exactFlowReady
   if (busy) {
     generateButton.classList.add('is-working')
     generateButton.firstElementChild!.textContent = 'Working in your browser…'
@@ -809,6 +935,8 @@ function updateGenerateButton(): void {
     generateButton.classList.remove('is-working')
     generateButton.firstElementChild!.textContent = platformRunBlocker
       ? 'Desktop browser required'
+      : !exactFlowReady
+        ? 'Connect the exact Mac MPS engine'
       : storageQualification?.supported === false
         ? 'Browser storage is insufficient'
         : selectedImage && hasModelBase
@@ -1205,6 +1333,11 @@ function renderPlatformQualification(): void {
   items.push(platformRunBlocker
     ? { text: platformRunBlocker, state: 'problem' }
     : { text: 'Desktop-class browser detected.', state: 'ready' })
+  if (REQUIRE_MAC_MPS_FLOW) {
+    items.push(MAC_MPS_FLOW === undefined
+      ? { text: 'Exact local Mac MPS sampler is not connected.', state: 'problem' }
+      : { text: 'Exact local Mac MPS sampler configured.', state: 'ready' })
+  }
   if (modelServerProblem) {
     items.push({ text: modelServerProblem, state: 'problem' })
   } else if (storageQualification) {
@@ -1221,12 +1354,15 @@ function renderPlatformQualification(): void {
     && storageQualification?.supported === true
     && platformRunBlocker === undefined
     && modelServerProblem === undefined
+    && (!REQUIRE_MAC_MPS_FLOW || MAC_MPS_FLOW !== undefined)
   platformBadge.classList.toggle('is-ready', ready)
   platformBadge.classList.toggle('is-missing', !ready)
   platformBadge.lastElementChild!.textContent = ready
     ? storageQualification?.state === 'warning' ? 'Ready with warning' : 'Browser ready'
     : platformRunBlocker
       ? 'Desktop required'
+      : REQUIRE_MAC_MPS_FLOW && MAC_MPS_FLOW === undefined
+        ? 'Connect Mac MPS'
       : compatibility?.supported === false
         ? 'WebGPU blocked'
         : storageQualification?.supported === false
@@ -1294,7 +1430,10 @@ async function verifyModelServer(
   }
   const manifest: unknown = await response.json().catch(() => undefined)
   if (manifest === undefined) throw new Error('The model manifest was not valid JSON.')
-  const summary = summarizeModelManifest(manifest)
+  const summary = summarizeModelManifest(
+    manifest,
+    MAC_MPS_FLOW === undefined && !REQUIRE_MAC_MPS_FLOW ? new Set() : new Set(['dit']),
+  )
   const qualification = await qualifyStorage(summary)
   return { summary, qualification }
 }
@@ -1350,6 +1489,8 @@ async function checkPlatform(): Promise<void> {
     setRunStatus('UNSUPPORTED', compatibility?.blockers.join(' ') || 'WebGPU is unavailable in this browser.')
   } else if (modelServerProblem) {
     setRunStatus('MODEL CHECK FAILED', modelServerProblem)
+  } else if (REQUIRE_MAC_MPS_FLOW && MAC_MPS_FLOW === undefined) {
+    setRunStatus('CONNECT MAC MPS', 'Start the v2 Mac launcher and connect its authenticated local service.')
   } else if (!storageQualification?.supported) {
     setRunStatus('STORAGE BLOCKED', storageQualification?.message ?? 'Browser storage could not be qualified.')
     showDiagnostics(storageQualification?.message ?? 'Browser storage could not be qualified.', storageQualification)
@@ -1371,6 +1512,9 @@ async function prepareModel(base: string, signal: AbortSignal): Promise<TripoSpl
     manifestUrl: 'manifest.json',
     executionProviders: ['webgpu'],
     cache: cacheBackend,
+    ...(MAC_MPS_FLOW === undefined
+      ? {}
+      : { prefetchGraphs: ['dino', 'vae', 'octree', 'gaussianDecoder'] as const }),
     wasmPaths: {
       mjs: '/ort/ort-wasm-simd-threaded.asyncify.mjs',
       wasm: '/ort/ort-wasm-simd-threaded.asyncify.wasm',
@@ -1413,6 +1557,9 @@ async function run(): Promise<void> {
   if (busy || activeRunController) throw new Error('Wait for the current image operation to finish before generating.')
   if (!compatibility?.supported) throw new Error('This browser does not meet the current WebGPU requirements.')
   if (platformRunBlocker) throw new Error(platformRunBlocker)
+  if (REQUIRE_MAC_MPS_FLOW && MAC_MPS_FLOW === undefined) {
+    throw new Error('Connect the authenticated local Mac MPS service before generating.')
+  }
   requireQualifiedStorage(storageQualification)
   const base = normalizedModelBase(modelBaseInput.value)
   hideDiagnostics()
@@ -1422,7 +1569,12 @@ async function run(): Promise<void> {
   startRunTelemetry(storageQualification?.cachedBytes ?? 0)
   setBusy(true)
   startActiveRunMarker()
-  setRunStatus('SOURCE IMAGE', 'Image accepted. Starting a local, browser-only generation…')
+  setRunStatus(
+    'SOURCE IMAGE',
+    MAC_MPS_FLOW === undefined
+      ? 'Image accepted. Starting a local, browser-only generation…'
+      : 'Image accepted. Starting browser preprocessing with the exact native Mac MPS sampler…',
+  )
   setPreviewRunState(
     activePlyUrl ? 'retained' : 'working',
     activePlyUrl
@@ -1446,6 +1598,7 @@ async function run(): Promise<void> {
       inputIsPrepared: image.inputIsPrepared,
       signal: runController.signal,
       onProgress: reportGenerationProgress,
+      ...(MAC_MPS_FLOW === undefined ? {} : { macMpsFlow: MAC_MPS_FLOW }),
     })
     try {
       updateActiveRunMarker('export')
@@ -1518,6 +1671,7 @@ function modelBaseFromLocation(): string {
 modelBaseInput.value = modelBaseFromLocation()
 applyProgressDetailMode(progressDetailMode, false)
 renderPreview()
+renderMpsConnection()
 
 for (const button of progressDetailButtons) {
   button.addEventListener('click', () => {
@@ -1572,6 +1726,15 @@ sourcePanel.addEventListener('drop', (event) => {
 })
 
 dropZone.addEventListener('click', () => fileInput.click())
+mpsConnectButton.addEventListener('click', () => {
+  void connectMacMpsFlow().catch((error) => {
+    const friendly = friendlyError(error)
+    mpsConnection.dataset.state = 'error'
+    mpsConnectionBadge.textContent = 'CONNECTION FAILED'
+    mpsConnectionStatus.dataset.state = 'error'
+    mpsConnectionStatus.textContent = friendly.message
+  })
+})
 modelBaseInput.addEventListener('input', () => {
   modelServerCheckSequence += 1
   const sequence = modelServerCheckSequence

@@ -109,10 +109,23 @@ function manifestUrl(options: TripoSplatOptions): URL {
   return new URL(options.manifestUrl ?? 'manifest.json', base)
 }
 
-function declaredArtifactBytes(manifest: ResolvedTripoSplatModelManifest): number {
-  if (manifest.estimatedModelBytes !== undefined) return manifest.estimatedModelBytes
+function selectedGraphNames(
+  manifest: ResolvedTripoSplatModelManifest,
+  graphs?: readonly TripoSplatGraphName[],
+): readonly TripoSplatGraphName[] {
+  return graphs ?? configuredGraphNames(manifest)
+}
+
+function declaredArtifactBytes(
+  manifest: ResolvedTripoSplatModelManifest,
+  graphs?: readonly TripoSplatGraphName[],
+): number {
+  if (graphs === undefined && manifest.estimatedModelBytes !== undefined) {
+    return manifest.estimatedModelBytes
+  }
   let total = 0
-  for (const graph of Object.values(manifest.graphs)) {
+  for (const name of selectedGraphNames(manifest, graphs)) {
+    const graph = manifest.graphs[name]
     if (!graph) continue
     if (graph.byteLength === undefined) return 0
     total += graph.byteLength
@@ -124,9 +137,13 @@ function declaredArtifactBytes(manifest: ResolvedTripoSplatModelManifest): numbe
   return total
 }
 
-function largestDeclaredArtifact(manifest: ResolvedTripoSplatModelManifest): number {
+function largestDeclaredArtifact(
+  manifest: ResolvedTripoSplatModelManifest,
+  graphs?: readonly TripoSplatGraphName[],
+): number {
   let largest = 0
-  for (const graph of Object.values(manifest.graphs)) {
+  for (const name of selectedGraphNames(manifest, graphs)) {
+    const graph = manifest.graphs[name]
     if (!graph) continue
     largest = Math.max(largest, graph.byteLength ?? 0)
     for (const external of graph.externalData ?? []) {
@@ -141,6 +158,7 @@ async function preflightPersistentStorage(
   backend: Exclude<TripoSplatOptions['cache'], 'none' | undefined>,
   cachedBytes: number,
   onProgress: LoadOptions['onProgress'],
+  graphs?: readonly TripoSplatGraphName[],
 ): Promise<void> {
   if (typeof navigator === 'undefined') return
   const storage = navigator.storage as StorageManager & {
@@ -162,12 +180,13 @@ async function preflightPersistentStorage(
   const quota = estimate?.quota
   const usage = estimate?.usage
   if (!Number.isFinite(quota) || !Number.isFinite(usage)) return
-  const declaredBytes = declaredArtifactBytes(manifest)
+  const declaredBytes = declaredArtifactBytes(manifest, graphs)
   if (declaredBytes === 0) return
   const missingBytes = Math.max(0, declaredBytes - cachedBytes)
   // Cache API promotion briefly keeps the current temporary and final object;
   // OPFS commits in place and needs only the missing verified bytes.
-  const requiredBytes = missingBytes + (backend === 'cache-api' ? largestDeclaredArtifact(manifest) : 0)
+  const requiredBytes = missingBytes
+    + (backend === 'cache-api' ? largestDeclaredArtifact(manifest, graphs) : 0)
   const availableBytes = Math.max(0, (quota as number) - (usage as number))
   if (requiredBytes > availableBytes) {
     throw new ModelDownloadError(
@@ -222,6 +241,12 @@ export class TripoSplatWebGPU {
       throw new TypeError('modelBaseUrl must be a non-empty URL or browser-relative path.')
     }
     if (options.executionProviders?.length === 0) throw new TypeError('executionProviders must not be empty.')
+    if (options.prefetchGraphs !== undefined) {
+      const allowed = new Set<TripoSplatGraphName>(REQUIRED_GENERATION_GRAPHS)
+      if (options.prefetchGraphs.some((graph) => !allowed.has(graph))) {
+        throw new TypeError('prefetchGraphs contains an unknown TripoSplat graph name.')
+      }
+    }
     this.options = { ...options }
   }
 
@@ -430,11 +455,24 @@ export class TripoSplatWebGPU {
     if (backend !== 'none') {
       // Validate backend availability even for an encoder-only/empty manifest.
       const cacheEntries = await artifactManager.status()
+      const selected = this.options.prefetchGraphs
       const cachedBytes = cacheEntries
-        .filter((entry) => entry.namespace === modelCacheNamespace(this.manifestValue!))
+        .filter((entry) => (
+          entry.namespace === modelCacheNamespace(this.manifestValue!)
+          && (
+            selected === undefined
+            || selected.some((graph) => entry.label.startsWith(`${graph}:`))
+          )
+        ))
         .reduce((total, entry) => total + entry.byteLength, 0)
-      await preflightPersistentStorage(this.manifestValue, backend, cachedBytes, options.onProgress)
-      await artifactManager.prefetchManifest(this.manifestValue, options.signal)
+      await preflightPersistentStorage(
+        this.manifestValue,
+        backend,
+        cachedBytes,
+        options.onProgress,
+        selected,
+      )
+      await artifactManager.prefetchManifest(this.manifestValue, options.signal, selected)
       throwIfAborted(options.signal)
       this.assertUsable()
     }

@@ -1,4 +1,5 @@
 import type { OnnxModelManifest } from './modelManifest'
+import type { WebGpuRunProfile } from '../../packages/triposplat-webgpu/src/profiling'
 import { copyModelManifest, resolveModelManifest } from './modelManifest'
 import type { TensorPayloadMap } from './tensors'
 import { assertTensorPayloadMap, tensorPayloadTransferables } from './tensors'
@@ -10,6 +11,10 @@ export interface OrtRuntimeConfiguration {
   wasmPaths?: string | { mjs?: string; wasm?: string }
   wasmThreads?: number
   wasmSimd?: boolean | 'fixed' | 'relaxed'
+  /** Separate ONNX Runtime trace stream. Disabled by default. */
+  trace?: boolean
+  /** Install WebGPU timestamp collection before the first session is created. */
+  webgpuProfiling?: boolean
 }
 
 export interface OrtWebGpuSessionOptions {
@@ -62,6 +67,8 @@ export interface OrtRunSessionRequest {
   /** Omit to fetch all graph outputs. */
   outputs?: readonly string[]
   tag?: string
+  /** Collect WebGPU kernel timestamps for this run. Requires runtime.webgpuProfiling. */
+  profileWebGpu?: boolean
 }
 
 export interface OrtRunClientOptions {
@@ -83,6 +90,8 @@ export interface OrtConfigureRuntimeResult {
   wasmThreads: number
   wasmSimd: boolean | 'fixed' | 'relaxed'
   wasmPaths: string | { mjs?: string; wasm?: string }
+  trace: boolean
+  webgpuProfiling: boolean
 }
 
 export interface OrtLoadSessionResult {
@@ -107,6 +116,7 @@ export interface OrtRunSessionResult {
   sessionId: string
   outputs: TensorPayloadMap
   timings: OrtRunTimings
+  profile?: WebGpuRunProfile
 }
 
 export interface OrtDisposeSessionResult {

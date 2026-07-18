@@ -14,6 +14,7 @@ import {
 } from './contracts.js'
 import { decodeGaussians, GAUSSIAN_FEATURE_WIDTH } from './decode.js'
 import { GraphCapabilityError, throwIfAborted } from './errors.js'
+import { runMacMpsFlow } from './mac-mps-flow.js'
 import type { ResolvedGraphManifestEntry } from './manifest.js'
 import { sampleOctree } from './octree.js'
 import { fillNormal, Mulberry32 } from './random.js'
@@ -46,11 +47,16 @@ interface TripoSplatCondition {
 }
 
 interface StageTimings {
+  dinoLoadMs: number
   dinoInferenceMs: number
+  vaeLoadMs: number
   vaeInferenceMs: number
+  ditLoadMs: number
   ditInferenceMs: number
   ditReadbackMs: number
+  octreeLoadMs: number
   octreeInferenceMs: number
+  gaussianLoadMs: number
   gaussianInferenceMs: number
   /** Wall time through Gaussian neural inference; excludes host activation and scene ownership copies. */
   throughGaussianInferenceMs: number
@@ -105,7 +111,7 @@ function assertGraphContract(name: TripoSplatGraphName, info: GraphInfo): void {
 async function loadStage(
   context: TripoSplatPipelineContext,
   name: TripoSplatGraphName,
-): Promise<ResolvedGraphManifestEntry> {
+): Promise<{ graph: ResolvedGraphManifestEntry; info: GraphInfo }> {
   const graph = requireGraph(context, name)
   const info = await context.runtime.loadGraph(context.sessionIds[name], graph, {
     // All published Chrome parity gates use the export graph exactly as written.
@@ -116,7 +122,7 @@ async function loadStage(
     ...(context.options.signal === undefined ? {} : { signal: context.options.signal }),
   })
   assertGraphContract(name, info)
-  return graph
+  return { graph, info }
 }
 
 function publicInputPrecision(graph: ResolvedGraphManifestEntry): Precision {
@@ -216,11 +222,16 @@ export async function runBuiltInTripoSplatPipeline(
   const startedAt = performance.now()
   const random = new Mulberry32(configuration.seed)
   const timings: StageTimings = {
+    dinoLoadMs: 0,
     dinoInferenceMs: 0,
+    vaeLoadMs: 0,
     vaeInferenceMs: 0,
+    ditLoadMs: 0,
     ditInferenceMs: 0,
     ditReadbackMs: 0,
+    octreeLoadMs: 0,
     octreeInferenceMs: 0,
+    gaussianLoadMs: 0,
     gaussianInferenceMs: 0,
     throughGaussianInferenceMs: 0,
   }
@@ -242,7 +253,8 @@ export async function runBuiltInTripoSplatPipeline(
 
     let feature1: Float32Array
     options.onProgress?.({ stage: 'dino', message: 'Running DINOv3 on WebGPU.' })
-    const dinoGraph = await loadStage(context, 'dino')
+    const { graph: dinoGraph, info: dinoInfo } = await loadStage(context, 'dino')
+    timings.dinoLoadMs = dinoInfo.loadMs
     try {
       const response = await context.runtime.runGraph(
         context.sessionIds.dino,
@@ -264,7 +276,8 @@ export async function runBuiltInTripoSplatPipeline(
 
     let feature2: Float32Array
     options.onProgress?.({ stage: 'vae', message: 'Running the Flux VAE encoder on WebGPU.' })
-    const vaeGraph = await loadStage(context, 'vae')
+    const { graph: vaeGraph, info: vaeInfo } = await loadStage(context, 'vae')
+    timings.vaeLoadMs = vaeInfo.loadMs
     try {
       const response = await context.runtime.runGraph(
         context.sessionIds.vae,
@@ -295,9 +308,46 @@ export async function runBuiltInTripoSplatPipeline(
       random,
     )
 
-    const ditGraph = await loadStage(context, 'dit')
     let flowState: FlowState
-    try {
+    let flowSourceCommit: string | undefined
+    if (options.macMpsFlow !== undefined) {
+      options.onProgress?.({
+        stage: 'sampling',
+        message: `Running the complete ${configuration.steps}-step sampler on native Mac MPS.`,
+        progress: 0,
+        step: 0,
+        totalSteps: configuration.steps,
+        invocation: 0,
+        totalInvocations: configuration.steps * 2,
+      })
+      const result = await runMacMpsFlow(options.macMpsFlow, {
+        latent,
+        camera,
+        feature1,
+        feature2,
+        steps: configuration.steps,
+        guidanceScale: configuration.guidanceScale,
+        shift: configuration.shift,
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+      })
+      timings.ditLoadMs = result.modelLoadMs ?? 0
+      timings.ditInferenceMs = result.inferenceMs
+      timings.ditReadbackMs = Math.max(0, result.wallMs - result.inferenceMs)
+      flowSourceCommit = result.sourceCommit
+      flowState = { latent: result.latent, camera: result.camera }
+      options.onProgress?.({
+        stage: 'sampling',
+        message: `Native Mac MPS completed ${configuration.steps * 2} official DiT invocations.`,
+        progress: 1,
+        step: configuration.steps,
+        totalSteps: configuration.steps,
+        invocation: configuration.steps * 2,
+        totalInvocations: configuration.steps * 2,
+      })
+    } else {
+      const { graph: ditGraph, info: ditInfo } = await loadStage(context, 'dit')
+      timings.ditLoadMs = ditInfo.loadMs
+      try {
       const positiveInputs: TensorMap = {
         feature1: inputTensor(ditGraph, feature1, TRIPOSPLAT_FEATURE1_SHAPE),
         feature2: inputTensor(ditGraph, feature2, TRIPOSPLAT_FEATURE2_SHAPE),
@@ -386,13 +436,15 @@ export async function runBuiltInTripoSplatPipeline(
           ...(options.signal === undefined ? {} : { signal: options.signal }),
         },
       )
-    } finally {
-      await context.runtime.disposeGraph(context.sessionIds.dit)
+      } finally {
+        await context.runtime.disposeGraph(context.sessionIds.dit)
+      }
     }
     const sampledLatent = flowState.latent
     assertLength('sampled latent', sampledLatent, elementCount(TRIPOSPLAT_LATENT_SHAPE))
 
-    const octreeGraph = await loadStage(context, 'octree')
+    const { graph: octreeGraph, info: octreeInfo } = await loadStage(context, 'octree')
+    timings.octreeLoadMs = octreeInfo.loadMs
     options.onProgress?.({ stage: 'octree', message: 'Sampling the eight-level occupancy octree.' })
     let points: Float32Array
     try {
@@ -444,7 +496,8 @@ export async function runBuiltInTripoSplatPipeline(
     }
     assertLength('octree points', points, TRIPOSPLAT_MAX_DECODER_POINTS * 3)
 
-    const gaussianGraph = await loadStage(context, 'gaussianDecoder')
+    const { graph: gaussianGraph, info: gaussianInfo } = await loadStage(context, 'gaussianDecoder')
+    timings.gaussianLoadMs = gaussianInfo.loadMs
     options.onProgress?.({ stage: 'gaussian-decoder', message: 'Decoding Gaussian features on WebGPU.' })
     let features: Float32Array
     try {
@@ -492,6 +545,8 @@ export async function runBuiltInTripoSplatPipeline(
         shift: configuration.shift,
         gaussianCount: configuration.gaussianCount,
         precision: context.manifest.precision,
+        flowBackend: options.macMpsFlow === undefined ? 'webgpu' : 'pytorch-mps-fp32',
+        ...(flowSourceCommit === undefined ? {} : { flowSourceCommit }),
         inputIsPrepared: options.inputIsPrepared ?? false,
         usedBackgroundRemoval: prepared.usedBackgroundRemoval,
         measuredTimingsMs: { ...timings },

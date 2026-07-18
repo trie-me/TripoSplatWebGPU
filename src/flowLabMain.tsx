@@ -14,6 +14,7 @@ const DEFAULT_MODEL = '/models/triposplat/dit_step_webgpu_fp32.onnx'
 const CONTEXT0_WGSL_PRE_MODEL = '/models/triposplat/dit_step_webgpu_fp32_context0_wgsl.pre.onnx'
 const CONTEXT0_WGSL_POST_MODEL = '/models/triposplat/dit_step_webgpu_fp32_context0_wgsl.post.onnx'
 type AttentionCandidate = 'canonical' | 'context0-wgsl'
+type GraphOptimizationLevel = 'disabled' | 'basic' | 'extended' | 'layout' | 'all'
 const DEFAULT_FIXTURE = '/fixtures/generated/flow4-fp32-compute'
 const SESSION_ID = 'triposplat/flow-parity'
 const FP16_TOLERANCE = { absolute: 0.2, relative: 0.05, minimumCosineSimilarity: 0.9995 }
@@ -49,6 +50,7 @@ interface FlowLabResult {
   passed: boolean
   strictPassed: boolean
   candidate: AttentionCandidate
+  graphOptimizationLevel: GraphOptimizationLevel
   executionProvider: string
   modelLoadMs: number
   modelTransferBytes?: number
@@ -81,6 +83,7 @@ interface FlowTrajectoryInvocation {
 interface FlowTrajectoryResult {
   passed: boolean
   candidate: AttentionCandidate
+  graphOptimizationLevel: GraphOptimizationLevel
   executionProvider: string
   modelLoadMs: number
   modelTransferBytes?: number
@@ -249,16 +252,33 @@ function attentionCandidate(): AttentionCandidate {
   throw new Error(`Unknown attentionCandidate '${value}'. Use 'canonical' or 'context0-wgsl'.`)
 }
 
+function graphOptimizationLevel(): GraphOptimizationLevel {
+  const value = initialUrl('optimization', 'disabled')
+  if (
+    value === 'disabled'
+    || value === 'basic'
+    || value === 'extended'
+    || value === 'layout'
+    || value === 'all'
+  ) {
+    return value
+  }
+  throw new Error(
+    `Unknown optimization '${value}'. Use disabled, basic, extended, layout, or all.`,
+  )
+}
+
 async function loadFlowSession(
   client: OrtWorkerClient,
   sessionId: string,
   modelUrl: string,
   candidate: AttentionCandidate,
+  optimization: GraphOptimizationLevel,
 ) {
   const sidecarUrl = `${modelUrl}.data`
   const externalDataPath = new URL(modelUrl, document.baseURI).pathname.split('/').at(-1)
   if (!externalDataPath) throw new Error(`Could not derive external-data path from ${modelUrl}.`)
-  const options = { allowWasmFallback: false, graphOptimizationLevel: 'disabled' as const }
+  const options = { allowWasmFallback: false, graphOptimizationLevel: optimization }
   const externalData = [{ path: `${decodeURIComponent(externalDataPath)}.data`, url: sidecarUrl }]
   if (candidate === 'context0-wgsl') {
     return client.loadContext0Split({
@@ -280,6 +300,7 @@ export function FlowLab() {
   const [modelUrl, setModelUrl] = useState(() => initialUrl('model', DEFAULT_MODEL))
   const [fixtureUrl, setFixtureUrl] = useState(() => initialUrl('fixture', DEFAULT_FIXTURE))
   const [candidate] = useState<AttentionCandidate>(() => attentionCandidate())
+  const [optimization] = useState<GraphOptimizationLevel>(() => graphOptimizationLevel())
   const [status, setStatus] = useState('Ready to validate the 4-step browser flow loop.')
   const [progress, setProgress] = useState('No DiT invocations yet.')
   const [busy, setBusy] = useState(false)
@@ -342,7 +363,13 @@ export function FlowLab() {
       }
 
       const modelTransferBytes = await modelTransferSize(modelUrl, candidate)
-      const loaded = await loadFlowSession(client, SESSION_ID, modelUrl, candidate)
+      const loaded = await loadFlowSession(
+        client,
+        SESSION_ID,
+        modelUrl,
+        candidate,
+        optimization,
+      )
       if (loaded.executionProvider !== 'webgpu') {
         throw new Error(`Expected WebGPU, loaded ${loaded.executionProvider}.`)
       }
@@ -430,6 +457,7 @@ export function FlowLab() {
         passed: invocations === expectedInvocations && outputs.latent.passed && outputs.camera.passed,
         strictPassed,
         candidate,
+        graphOptimizationLevel: optimization,
         executionProvider: loaded.executionProvider,
         modelLoadMs: loaded.loadMs,
         modelTransferBytes,
@@ -503,7 +531,13 @@ export function FlowLab() {
       const zeroFeature1 = new Float32Array(feature1.length)
       const zeroFeature2 = new Float32Array(feature2.length)
       const modelTransferBytes = await modelTransferSize(modelUrl, candidate)
-      const loaded = await loadFlowSession(client, `${SESSION_ID}/trajectory`, modelUrl, candidate)
+      const loaded = await loadFlowSession(
+        client,
+        `${SESSION_ID}/trajectory`,
+        modelUrl,
+        candidate,
+        optimization,
+      )
       if (loaded.executionProvider !== 'webgpu') {
         throw new Error(`Expected WebGPU, loaded ${loaded.executionProvider}.`)
       }
@@ -570,6 +604,7 @@ export function FlowLab() {
       const next: FlowTrajectoryResult = {
         passed: records.every((record) => record.latent.passed && record.camera.passed),
         candidate,
+        graphOptimizationLevel: optimization,
         executionProvider: loaded.executionProvider,
         modelLoadMs: loaded.loadMs,
         ...(modelTransferBytes === undefined ? {} : { modelTransferBytes }),
@@ -624,6 +659,7 @@ export function FlowLab() {
       <h1>TripoSplat · WebGPU flow parity</h1>
       <p>Runs the TypeScript CFG/Euler loop using the official fixture's 4- or 20-step schedule.</p>
       <p>Attention candidate: <strong>{candidate}</strong> (set <code>attentionCandidate=context0-wgsl</code> to opt in).</p>
+      <p>Graph optimization: <strong>{optimization}</strong> (set <code>optimization=all</code> for the measured Mac fast path).</p>
       <label>ONNX graph <input value={modelUrl} onChange={(event) => setModelUrl(event.target.value)} /></label>
       <label>Fixture directory <input value={fixtureUrl} onChange={(event) => setFixtureUrl(event.target.value)} /></label>
       <button type="button" disabled={busy} onClick={() => void run()}>

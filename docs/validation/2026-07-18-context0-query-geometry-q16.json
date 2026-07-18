@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-07-18",
+  "repositoryControlled": true,
+  "component": "context_refiner.0 query geometry and q16 export candidate",
+  "scope": "Exact invocation-7 and invocation-8 context_refiner.0 captures, MPS SDPA geometry replay, full CPU ORT prediction gates, and Chrome WebGPU teacher-forced replay.",
+  "source": {
+    "officialRepository": "https://github.com/VAST-AI-Research/TripoSplat",
+    "officialRevision": "a78fa12d06dbf1381ca548bfac32bb68cb8c451d",
+    "captureRoot": "/private/tmp/dit-attention-parity-20260716/captures"
+  },
+  "mpsGeometry": {
+    "torchVersion": "2.13.0",
+    "device": "mps",
+    "retainedRows": 4,
+    "keyValueRows": 4101,
+    "tailPoliciesTestedAtQueryLength16": [
+      "actual-prefix",
+      "repeat-first",
+      "repeat-four",
+      "zero"
+    ],
+    "invocation7": {
+      "queryLength4Or8": {
+        "maxAbsoluteError": 0.0000016093254089355469,
+        "rmse": 1.161616931374967e-7
+      },
+      "queryLength16Through4101": {
+        "maxAbsoluteError": 0,
+        "rmse": 0
+      }
+    },
+    "invocation8": {
+      "queryLength4Or8": {
+        "maxAbsoluteError": 0.00019788742065429688,
+        "rmse": 0.000045482865370428117
+      },
+      "queryLength16Through4101": {
+        "maxAbsoluteError": 0,
+        "rmse": 0
+      }
+    },
+    "interpretation": "MPS has a query-geometry threshold at 16 for the retained rows, and non-retained query contents do not affect them. The canonical exporter already uses 256-query chunks, so it is already above this threshold."
+  },
+  "q16Candidate": {
+    "change": "Only context_refiner.0 uses 16-query functional SDPA chunks. The final partial chunk is padded with a repeated live row and padding outputs are discarded.",
+    "graph": {
+      "bytes": 13152136,
+      "sha256": "170399c2ca896717f28c5d3908fd6d137214505253e403f3618b774bed971932",
+      "canonicalBytes": 10685614,
+      "sidecarBytes": 1633210368,
+      "sidecarSha256": "eacadf21577a976ce0a635cf8b1bbdb4b2c0cdb9cb55d4d73af87957c1e72023"
+    },
+    "cpuOrtVersusUntouchedOfficial": {
+      "invocation7": {
+        "passed": true,
+        "latentMaxAbsoluteError": 0.00004374980926513672,
+        "latentRmse": 0.0000052590675893104175
+      },
+      "invocation8": {
+        "passed": false,
+        "latentMaxAbsoluteError": 0.0007642507553100586,
+        "latentRmse": 0.0000566413873472652
+      },
+      "comparisonToCanonical": "Both full-prediction metric sets are identical to the canonical CPU ORT reports."
+    },
+    "chromeWebgpuGraphOptimizationAll": {
+      "environment": {
+        "browser": "Chrome 150.0.0.0",
+        "adapterVendor": "apple",
+        "adapterArchitecture": "metal-3",
+        "executionProvider": "webgpu",
+        "onnxruntimeWebVersion": "1.27.0"
+      },
+      "modelLoadMs": 12833.600000143051,
+      "eightInvocationInferenceMs": 105867.5,
+      "invocation7": {
+        "passed": true,
+        "latentMaxAbsoluteError": 0.00004839897155761719,
+        "latentMeanAbsoluteError": 0.0000017982404559857557,
+        "latentRmse": 0.0000023705966463956556
+      },
+      "invocation8": {
+        "passed": false,
+        "latentMaxAbsoluteError": 0.0008309667464345694,
+        "latentMeanAbsoluteError": 0.0000539209430014953,
+        "latentRmse": 0.00007073321853021876
+      },
+      "comparisonToCanonicalOptimizationAll": "Invocation 7 and invocation 8 metrics are exactly identical to the canonical graphOptimizationLevel=all report."
+    }
+  },
+  "decision": {
+    "status": "rejected",
+    "productionGraphChanged": false,
+    "productionManifestChanged": false,
+    "candidateExportOptionRetained": false,
+    "reason": "The canonical 256-query chunks already reproduce the measured full-query MPS geometry. Q16 increases graph size, leaves CPU ORT unchanged, and is an exact numerical no-op under optimized WebGPU while invocation 8 still fails."
+  }
+}

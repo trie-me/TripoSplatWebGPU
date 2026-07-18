@@ -3,6 +3,11 @@ export {
   loadGraph,
   runGraph,
 } from './runtime.js'
+export { runMacMpsFlow } from './mac-mps-flow.js'
+export type {
+  MacMpsFlowRequest,
+  MacMpsFlowResult,
+} from './mac-mps-flow.js'
 export type {
   CreateRuntimeOptions,
   GraphInfo,
@@ -13,6 +18,14 @@ export type {
   RuntimeStatus,
   TripoSplatRuntime,
 } from './runtime.js'
+export { summarizeWebGpuProfiling } from './profiling.js'
+export type {
+  WebGpuKernelProfile,
+  WebGpuProfilingRecord,
+  WebGpuProfilingSummary,
+  WebGpuProfilingTensorMetadata,
+  WebGpuRunProfile,
+} from './profiling.js'
 
 export {
   clearModelCache,

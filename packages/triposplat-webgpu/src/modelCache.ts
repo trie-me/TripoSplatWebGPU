@@ -707,8 +707,10 @@ export class ModelArtifactManager {
   async prefetchManifest(
     manifest: ResolvedTripoSplatModelManifest,
     signal?: AbortSignal,
+    graphs?: readonly TripoSplatGraphName[],
   ): Promise<void> {
-    for (const graph of Object.keys(manifest.graphs) as TripoSplatGraphName[]) {
+    const selected = graphs ?? (Object.keys(manifest.graphs) as TripoSplatGraphName[])
+    for (const graph of selected) {
       const descriptor = manifest.graphs[graph]
       if (!descriptor) continue
       for (const asset of this.descriptors(graph, descriptor)) {

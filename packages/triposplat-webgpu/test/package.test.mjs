@@ -13,8 +13,14 @@ import {
   expandOctreeFrontier,
   parseModelManifest,
   resolveModelManifest,
+  runMacMpsFlow,
   sampleOctree,
+  summarizeWebGpuProfiling,
   systematicResample,
+  TRIPOSPLAT_CAMERA_SHAPE,
+  TRIPOSPLAT_FEATURE1_SHAPE,
+  TRIPOSPLAT_FEATURE2_SHAPE,
+  TRIPOSPLAT_LATENT_SHAPE,
 } from '../dist/low-level.js'
 
 const metadata = {
@@ -86,6 +92,108 @@ test('fp32 CFG preserves PyTorch per-operation rounding', () => {
   const unconditional = { latent: Float32Array.of(0.7559554576873779) }
   const result = blendGuidance(conditional, unconditional, 3, 'fp32')
   assert.equal(result.latent[0], -0.24183082580566406)
+})
+
+test('Mac MPS client uses one authenticated fixed-shape request and splits the response', async () => {
+  const count = (shape) => shape.reduce((product, dimension) => product * dimension, 1)
+  const latent = new Float32Array(count(TRIPOSPLAT_LATENT_SHAPE))
+  const camera = new Float32Array(count(TRIPOSPLAT_CAMERA_SHAPE))
+  const feature1 = new Float32Array(count(TRIPOSPLAT_FEATURE1_SHAPE))
+  const feature2 = new Float32Array(count(TRIPOSPLAT_FEATURE2_SHAPE))
+  latent[0] = 1
+  camera[0] = 2
+  feature1[0] = 3
+  feature2[0] = 4
+  const responseValues = new Float32Array(latent.length + camera.length)
+  responseValues[0] = 11
+  responseValues[latent.length] = 22
+  const originalFetch = globalThis.fetch
+  let calls = 0
+  globalThis.fetch = async (url, options) => {
+    calls += 1
+    assert.equal(String(url), 'http://127.0.0.1:8765/v1/flow')
+    assert.equal(options.method, 'POST')
+    assert.equal(options.headers['X-Triposplat-Token'], '0123456789abcdef')
+    assert.equal(options.headers['X-Triposplat-Steps'], '20')
+    assert.ok(options.body instanceof ArrayBuffer)
+    const body = new Float32Array(options.body)
+    assert.equal(body.length, latent.length + camera.length + feature1.length + feature2.length)
+    assert.equal(body[0], 1)
+    assert.equal(body[latent.length], 2)
+    assert.equal(body[latent.length + camera.length], 3)
+    assert.equal(body[latent.length + camera.length + feature1.length], 4)
+    return new Response(responseValues.buffer, {
+      headers: {
+        'X-Triposplat-Inference-Ms': '123.5',
+        'X-Triposplat-Model-Load-Ms': '20.25',
+        'X-Triposplat-Source-Commit': 'a78fa12d',
+      },
+    })
+  }
+  try {
+    const result = await runMacMpsFlow(
+      { serviceUrl: 'http://127.0.0.1:8765/', token: '0123456789abcdef' },
+      { latent, camera, feature1, feature2, steps: 20, guidanceScale: 3, shift: 3 },
+    )
+    assert.equal(calls, 1)
+    assert.equal(result.latent[0], 11)
+    assert.equal(result.camera[0], 22)
+    assert.equal(result.inferenceMs, 123.5)
+    assert.equal(result.modelLoadMs, 20.25)
+    assert.equal(result.sourceCommit, 'a78fa12d')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('Mac MPS client refuses non-loopback endpoints before uploading tensors', async () => {
+  const count = (shape) => shape.reduce((product, dimension) => product * dimension, 1)
+  await assert.rejects(
+    runMacMpsFlow(
+      { serviceUrl: 'https://example.com/', token: '0123456789abcdef' },
+      {
+        latent: new Float32Array(count(TRIPOSPLAT_LATENT_SHAPE)),
+        camera: new Float32Array(count(TRIPOSPLAT_CAMERA_SHAPE)),
+        feature1: new Float32Array(count(TRIPOSPLAT_FEATURE1_SHAPE)),
+        feature2: new Float32Array(count(TRIPOSPLAT_FEATURE2_SHAPE)),
+        steps: 20,
+        guidanceScale: 3,
+        shift: 3,
+      },
+    ),
+    /loopback/,
+  )
+})
+
+test('WebGPU profiling summary reports dispatch distribution and cumulative kernels', () => {
+  const record = (programName, startTime, endTime) => ({
+    version: 1,
+    inputsMetadata: [],
+    outputsMetadata: [],
+    kernelId: 1,
+    kernelType: 'MatMul',
+    kernelName: 'MatMul',
+    programName,
+    startTime,
+    endTime,
+  })
+  const summary = summarizeWebGpuProfiling([
+    record('matmul-a', 0, 1_000_000),
+    record('matmul-a', 1_000_000, 4_000_000),
+    record('softmax', 4_000_000, 6_000_000),
+  ])
+  assert.equal(summary.dispatchCount, 3)
+  assert.equal(summary.summedGpuKernelMs, 6)
+  assert.equal(summary.medianDispatchMs, 2)
+  assert.equal(summary.p95DispatchMs, 3)
+  assert.deepEqual(summary.topKernels.map(({ programName, dispatchCount, totalMs }) => ({
+    programName,
+    dispatchCount,
+    totalMs,
+  })), [
+    { programName: 'matmul-a', dispatchCount: 2, totalMs: 4 },
+    { programName: 'softmax', dispatchCount: 1, totalMs: 2 },
+  ])
 })
 
 test('Gaussian decoder returns canonical scenes with both PLY and splat export', async () => {

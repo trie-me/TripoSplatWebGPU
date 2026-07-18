@@ -10,6 +10,8 @@ This is not a WebGPU-only defect: ORT CPU reproduces it. WebGPU weighted-value r
 
 The implementation decision is **no-go**. None of the measured materialized, sequential, pairwise, blockwise, or fused online-softmax/value variants improved weighted-value RMSE over canonical ORT on both invocation 7 and invocation 8. No WGSL kernel or production feature flag was added. The canonical graph remains the only deployed path.
 
+A later direct invariant check reaches the same no-go without building another graph. Invocation-8 V rows are bit-identical, but untouched official weighted output differs from the representative V by `4.5447353e-5` RMSE, slightly worse than canonical ORT CPU `4.5354315e-5`; invocation 7 is not repeated. Evidence: [`repeated-V rejection`](docs/validation/2026-07-18-context0-repeated-v-invariant.json).
+
 Machine-readable evidence is in [`attention-reduction-results.json`](attention-reduction-results.json). The browser comparison is in [`docs/validation/2026-07-16-context0-attention-webgpu.json`](docs/validation/2026-07-16-context0-attention-webgpu.json).
 
 ## Reproduced localized baseline
@@ -64,6 +66,7 @@ Verified facts:
 - Official source calls `torch.nn.functional.scaled_dot_product_attention` with layout `[1,16,4101,64]`, no mask, dropout zero, and no deterministic-algorithm requirement.
 - Profiler dispatch is `aten::_scaled_dot_product_attention_math_for_mps` beneath `aten::scaled_dot_product_attention`; FlashAttention, xFormers, CUDA memory-efficient attention, and custom project attention are not active.
 - A four-query replay of exact captured Q/K/V dispatches to the same operator but differs from the original 4,101-query call by `1.9788742e-4` max and `4.5482865e-5` RMSE on the retained rows. Therefore the backend's numerical reduction depends on full query geometry/tiling even though rows are mathematically independent.
+- The completed geometry sweep finds the transition at query length 16: invocation 7 and invocation 8 retained rows are bit-identical to the 4,101-query official output for every tested length from 16 through 4,101, independent of whether later query rows are real, repeated, or zero. Lengths 4 and 8 use the other numerical path. The canonical exporter already uses 256-query chunks and therefore already clears this threshold.
 
 Not observable and therefore not claimed as fact: MPS accumulator precision, whether probabilities are physically materialized, internal tile sizes, and the exact reduction tree. The query-length experiment strongly indicates geometry-dependent tiling/reduction order, but does not identify its source implementation details.
 
@@ -117,8 +120,10 @@ Stopped by the predeclared no-go gate and intentionally not rerun: full `context
 
 Canonical 20-step metrics therefore remain unchanged: browser final-state latent max `0.0487092733`, mean `0.00035171698`, RMSE `0.00081205185`; canonical invocation-40 CPU metric remains `0.00105971`. No before/after production metric exists because no candidate was integrated.
 
-## Qualification statement and next action
+## Query-geometry follow-up and qualification statement
 
 The faithful product statement remains: the canonical 20-step WebGPU path completes but is not official-quality/parity-qualified. No exact FAL parity is claimed; FAL provenance remains unavailable.
 
-The single highest-value next action is a controlled **full-query-geometry MPS reduction study**: hold the first captured Q rows and all K/V fixed, sweep total query count/padding and inspect retained outputs to infer the tile transition used by `_scaled_dot_product_attention_math_for_mps`. Only after a reduction tree reproduces the original 4,101-query MPS output should it be implemented as an isolated WGSL kernel and reconsidered for integration.
+The full-query-geometry study is now complete. A `context_refiner.0` q16 export was built because 16 is the exact observed MPS threshold. It increased graph size from 10,685,614 to 13,152,136 bytes, left invocation-7/8 CPU ORT predictions identical to canonical, and produced invocation-7/8 Chrome WebGPU metrics exactly identical to canonical `graphOptimizationLevel=all`; invocation 8 still failed. This confirms that query geometry is not the missing production correction because the canonical q256 chunks already select the measured target path.
+
+The single highest-value next action is now a layout-safe **4,101-key probability×V lowering** owned end-to-end by ORT or a custom operation with a documented GPU-buffer layout. It must preserve the canonical score, softmax, multiplicity, and full-query semantics and pass both invocations before any full trajectory work. The raw packed-buffer WGSL attempt cannot be revived without first establishing that layout contract. Evidence: [`q16 rejection`](docs/validation/2026-07-18-context0-query-geometry-q16.json).

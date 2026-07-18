@@ -162,6 +162,33 @@ test('persistent prefetch memoizes verified blobs for prepareGraph within one ma
   assert.equal(hashReads, 1)
 })
 
+test('persistent prefetch can omit the WebGPU DiT artifact for the Mac MPS path', async () => {
+  const artifact = bytes('selected graph')
+  const downloads = []
+  const manager = new ModelArtifactManager({
+    backend: 'cache-api',
+    namespace: 'triposplat/1/mac-mps/fp32',
+    storage: new MemoryModelArtifactStorage(),
+    fetch: async (url) => {
+      downloads.push(String(url))
+      return new Response(artifact)
+    },
+  })
+  const graph = (name) => ({
+    url: `https://cdn.example.test/${name}.onnx`,
+    byteLength: artifact.byteLength,
+    integrity: { algorithm: 'sha256', digest: digest(artifact) },
+  })
+  await manager.prefetchManifest({
+    name: 'triposplat-webgpu',
+    version: '1',
+    modelRevision: 'mac-mps',
+    precision: 'fp32',
+    graphs: { dino: graph('dino'), dit: graph('dit') },
+  }, undefined, ['dino'])
+  assert.deepEqual(downloads, ['https://cdn.example.test/dino.onnx'])
+})
+
 test("cache 'none' never retains verified artifacts between prepareGraph calls", async () => {
   const artifact = bytes('non-persistent graph')
   const storage = new MemoryModelArtifactStorage()

@@ -182,5 +182,67 @@ test('built-in pipeline stages every graph, preserves public dtypes, and returns
   assert.equal(preparedDisposed, true)
   assert.equal(scene.metadata.modelRevision, 'a78fa12d')
   assert.equal(scene.metadata.generationSettings.steps, 4)
+  assert.deepEqual(
+    Object.fromEntries(
+      Object.entries(scene.metadata.generationSettings.measuredTimingsMs)
+        .filter(([name]) => name.endsWith('LoadMs')),
+    ),
+    {
+      dinoLoadMs: 1,
+      vaeLoadMs: 1,
+      ditLoadMs: 1,
+      octreeLoadMs: 1,
+      gaussianLoadMs: 1,
+    },
+  )
   scene.dispose()
+
+  loaded.length = 0
+  disposed.length = 0
+  runs.length = 0
+  const originalFetch = globalThis.fetch
+  let mpsRequests = 0
+  const flowResponse = new Float32Array(
+    count(TRIPOSPLAT_LATENT_SHAPE) + count(TRIPOSPLAT_CAMERA_SHAPE),
+  )
+  globalThis.fetch = async () => {
+    mpsRequests += 1
+    return new Response(flowResponse.buffer, {
+      headers: {
+        'X-Triposplat-Inference-Ms': '347092.6',
+        'X-Triposplat-Model-Load-Ms': '2248.3',
+        'X-Triposplat-Source-Commit': 'a78fa12d',
+      },
+    })
+  }
+  try {
+    const mpsScene = await runBuiltInTripoSplatPipeline({
+      input: new Blob(),
+      options: {
+        steps: 20,
+        inputIsPrepared: true,
+        vaeNoise: new Float32Array(count(TRIPOSPLAT_VAE_NOISE_SHAPE)),
+        latentNoise: new Float32Array(count(TRIPOSPLAT_LATENT_SHAPE)),
+        cameraNoise: new Float32Array(count(TRIPOSPLAT_CAMERA_SHAPE)),
+        macMpsFlow: {
+          serviceUrl: 'http://127.0.0.1:8765/',
+          token: '0123456789abcdef',
+        },
+      },
+      manifest,
+      runtime,
+      sessionIds,
+      preprocess: preprocessor,
+    })
+    assert.equal(mpsRequests, 1)
+    assert.deepEqual(loaded, ['dino', 'vae', 'octree', 'gaussianDecoder'])
+    assert.deepEqual(disposed, loaded)
+    assert.equal(runs.some(({ graph: name }) => name === 'dit'), false)
+    assert.equal(mpsScene.metadata.generationSettings.flowBackend, 'pytorch-mps-fp32')
+    assert.equal(mpsScene.metadata.generationSettings.flowSourceCommit, 'a78fa12d')
+    assert.equal(mpsScene.metadata.generationSettings.measuredTimingsMs.ditLoadMs, 2248.3)
+    mpsScene.dispose()
+  } finally {
+    globalThis.fetch = originalFetch
+  }
 })

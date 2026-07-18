@@ -1,0 +1,146 @@
+{
+  "advances_to_browser_diagnostic": true,
+  "candidate": {
+    "name": "mps-prefill-sequential-exp2-v2",
+    "precision": "fp32",
+    "reduction": "sequential scalar emulation for the captured gate",
+    "scale": 0.125,
+    "scale_log2_e": 0.1803368777036667,
+    "softmax": "online unnormalised exp2 accumulation; one final divide"
+  },
+  "decision": "Advance only as a diagnostic WebGPU handoff test. Invocation 7 stays inside the strict boundary gate and invocation 8 RMSE improves over canonical ORT, but invocation 8 still has 20 values outside the boundary tolerance. This does not qualify a Context0-only graph or the full DiT: later joint attentions independently reproduce the backend drift.",
+  "invocations": [
+    {
+      "candidate": {
+        "onnxruntime_cpu_inputs": {
+          "inputs": {
+            "k": {
+              "path": "/private/tmp/dit-attention-parity-20260716/captures/invocation_07/onnxruntime_cpu/probe_context0_k_transposed.npy",
+              "sha256": "c5a7e375f0053d11f14b36233dac6981ee14b952772fa2fe9b13ea443ef818d0"
+            },
+            "q": {
+              "path": "/private/tmp/dit-attention-parity-20260716/captures/invocation_07/onnxruntime_cpu/probe_context0_q_transposed.npy",
+              "sha256": "86c5b9fcd61005d5f6feccfd552dd27d84abb7077638bfd10a088a90ef44b6ec"
+            },
+            "v": {
+              "path": "/private/tmp/dit-attention-parity-20260716/captures/invocation_07/onnxruntime_cpu/probe_context0_v_transposed.npy",
+              "sha256": "75503915813eee328499da74651dac6de5de78aa6109617b0595a5f546f48932"
+            }
+          },
+          "metrics_vs_untouched_official": {
+            "fraction_within_tolerance": 1.0,
+            "max_absolute_error": 1.296401023864746e-06,
+            "mean_absolute_error": 1.2895426770853646e-07,
+            "passed": true,
+            "rmse": 1.7665698884600084e-07
+          }
+        },
+        "untouched_official_inputs": {
+          "inputs": {
+            "k": {
+              "path": "/private/tmp/dit-attention-parity-20260716/captures/invocation_07/untouched_official/k_transposed.npy",
+              "sha256": "2c406508577211f0171d513913bbb4d34b35bc3a8de3f7c8772cb0bac4382a3c"
+            },
+            "q": {
+              "path": "/private/tmp/dit-attention-parity-20260716/captures/invocation_07/untouched_official/q_transposed_rows.npy",
+              "sha256": "dbf7b83db92a20f40e05f02b2bfd344413574e9cff1911e2d65886a4fe396ec0"
+            },
+            "v": {
+              "path": "/private/tmp/dit-attention-parity-20260716/captures/invocation_07/untouched_official/v_transposed.npy",
+              "sha256": "0279e75f59666ae992eaeff66d90580b4010d607e5a6338694a2172ea929c157"
+            }
+          },
+          "metrics_vs_untouched_official": {
+            "fraction_within_tolerance": 1.0,
+            "max_absolute_error": 7.450580596923828e-07,
+            "mean_absolute_error": 7.587878370074463e-08,
+            "passed": true,
+            "rmse": 1.1433925969388817e-07
+          }
+        }
+      },
+      "canonical_ort_cpu": {
+        "metrics_vs_untouched_official": {
+          "fraction_within_tolerance": 1.0,
+          "max_absolute_error": 1.6093254089355469e-06,
+          "mean_absolute_error": 1.20937265313259e-07,
+          "passed": true,
+          "rmse": 1.6756650818686303e-07
+        },
+        "path": "/private/tmp/dit-attention-parity-20260716/captures/invocation_07/onnxruntime_cpu/probe_context0_weighted_value_rows.npy",
+        "sha256": "97f9c73b1a31281c63850ce3e773c1e48f2336d910756451957d7ebd85a205fb"
+      },
+      "conditioning": "conditional",
+      "invocation": 7
+    },
+    {
+      "candidate": {
+        "onnxruntime_cpu_inputs": {
+          "inputs": {
+            "k": {
+              "path": "/private/tmp/dit-attention-parity-20260716/captures/invocation_08/onnxruntime_cpu/probe_context0_k_transposed.npy",
+              "sha256": "75df150b6d9f2ce883320b11a4960a37c4cc0ea2f8b116b22c3b7fb9f1e97070"
+            },
+            "q": {
+              "path": "/private/tmp/dit-attention-parity-20260716/captures/invocation_08/onnxruntime_cpu/probe_context0_q_transposed.npy",
+              "sha256": "d8f84a9197f946e6357cddfa59fecf0578fd1e7bddba93743a5d7765b9380ecd"
+            },
+            "v": {
+              "path": "/private/tmp/dit-attention-parity-20260716/captures/invocation_08/onnxruntime_cpu/probe_context0_v_transposed.npy",
+              "sha256": "269f03b4035d3ebf1d81ef9588fdc75d39fa01bd0d16d52a78c3186eb66b664b"
+            }
+          },
+          "metrics_vs_untouched_official": {
+            "fraction_within_tolerance": 0.9951171875,
+            "max_absolute_error": 5.8770179748535156e-05,
+            "mean_absolute_error": 4.338088217537006e-07,
+            "passed": false,
+            "rmse": 3.938259854949384e-06
+          }
+        },
+        "untouched_official_inputs": {
+          "inputs": {
+            "k": {
+              "path": "/private/tmp/dit-attention-parity-20260716/captures/invocation_08/untouched_official/k_transposed.npy",
+              "sha256": "9a0bb9d22c13125d2e76099eee766d08130d059acd88a94b061b996bdf1a355a"
+            },
+            "q": {
+              "path": "/private/tmp/dit-attention-parity-20260716/captures/invocation_08/untouched_official/q_transposed_rows.npy",
+              "sha256": "884ec4bf3b12f85f2e64c305d8214b0508c588ee0f2e3096ea43f1b19b29594f"
+            },
+            "v": {
+              "path": "/private/tmp/dit-attention-parity-20260716/captures/invocation_08/untouched_official/v_transposed.npy",
+              "sha256": "21fd0a93ea844fd6a305e4ff1fd6dffe0ca563b9cb3699aa5c90fa7ee25cb3c4"
+            }
+          },
+          "metrics_vs_untouched_official": {
+            "fraction_within_tolerance": 1.0,
+            "max_absolute_error": 0.0,
+            "mean_absolute_error": 0.0,
+            "passed": true,
+            "rmse": 0.0
+          }
+        }
+      },
+      "canonical_ort_cpu": {
+        "metrics_vs_untouched_official": {
+          "fraction_within_tolerance": 0.4921875,
+          "max_absolute_error": 0.00020122528076171875,
+          "mean_absolute_error": 3.092229351864262e-05,
+          "passed": false,
+          "rmse": 4.535431496740589e-05
+        },
+        "path": "/private/tmp/dit-attention-parity-20260716/captures/invocation_08/onnxruntime_cpu/probe_context0_weighted_value_rows.npy",
+        "sha256": "62f5db7655d35754107055eb98b3f573634cca56d0aec803fc8959a65a2f0fd1"
+      },
+      "conditioning": "zero_conditioned",
+      "invocation": 8
+    }
+  ],
+  "passed": false,
+  "scope": "captured context_refiner.0 weighted-value boundary only",
+  "tolerance": {
+    "absolute": 1e-05,
+    "relative": 1e-05
+  }
+}

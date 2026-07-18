@@ -11,6 +11,10 @@ import type {
   RuntimeWorkerRequest,
   RuntimeWorkerResult,
 } from './runtime.js'
+import {
+  summarizeWebGpuProfiling,
+  type WebGpuProfilingRecord,
+} from './profiling.js'
 import { assertTensorMap, createTensor, tensorTransferables, type TensorPayload } from './tensors.js'
 import type { ExecutionProvider } from './types.js'
 
@@ -26,6 +30,25 @@ interface SessionRecord {
 
 const sessions = new Map<string, SessionRecord>()
 let configured = false
+let profilingConfigured = false
+let profilingRecords: WebGpuProfilingRecord[] = []
+let profilingRunTail = Promise.resolve()
+
+function timestampQuerySupported(): boolean {
+  const adapter = ort.env.webgpu.adapter as { features?: ReadonlySet<string> } | undefined
+  const device = ort.env.webgpu.device as { features?: ReadonlySet<string> } | undefined
+  const features = device?.features ?? adapter?.features
+  return features?.has('timestamp-query') === true
+    || features?.has('chromium-experimental-timestamp-query-inside-passes') === true
+}
+
+async function awaitProfilingCallbacks(): Promise<void> {
+  const device = ort.env.webgpu.device as {
+    queue?: { onSubmittedWorkDone?(): Promise<void> }
+  } | undefined
+  await device?.queue?.onSubmittedWorkDone?.()
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+}
 
 function status(value: Omit<RuntimeStatus, 'timestampMs'>): void {
   const message: RuntimeWorkerMessage = {
@@ -67,6 +90,28 @@ function configure(configuration: RuntimeConfiguration): void {
   if (!Number.isInteger(threads) || threads < 1) throw new RangeError('wasmThreads must be positive.')
   ort.env.wasm.numThreads = threads
   ort.env.wasm.simd = configuration.wasmSimd ?? true
+  ort.env.trace = configuration.trace ?? false
+  profilingConfigured = configuration.webgpuProfiling ?? false
+  if (profilingConfigured) {
+    ort.env.webgpu.profiling = {
+      mode: 'off',
+      ondata: (record) => {
+        profilingRecords.push({
+          ...record,
+          inputsMetadata: record.inputsMetadata.map((value) => ({
+            dims: Array.from(value.dims),
+            dataType: value.dataType,
+          })),
+          outputsMetadata: record.outputsMetadata.map((value) => ({
+            dims: Array.from(value.dims),
+            dataType: value.dataType,
+          })),
+        })
+      },
+    }
+  } else {
+    ort.env.webgpu.profiling = { mode: 'off' }
+  }
   if (typeof configuration.wasmPaths === 'string') {
     ort.env.wasm.wasmPaths = new URL(configuration.wasmPaths, scope.location.href).href
   } else if (configuration.wasmPaths) {
@@ -204,6 +249,18 @@ async function executeRun(
   request: RuntimeWorkerRequest & { type: 'run' },
   record: SessionRecord,
 ): Promise<GraphRunResult> {
+  const profileWebGpu = request.profileWebGpu === true
+  if (profileWebGpu && !profilingConfigured) {
+    throw new Error(
+      'WebGPU profiling was not configured before session creation. ' +
+        'Create a diagnostic runtime with configuration.webgpuProfiling enabled.',
+    )
+  }
+  ort.env.webgpu.profiling.mode = profileWebGpu ? 'default' : 'off'
+  // Let any callback from the previous, globally serialized diagnostic run land
+  // before taking this run's record cursor.
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  const profilingStart = profilingRecords.length
   status({
     stage: 'inference-running',
     message: `Running '${request.sessionId}'.`,
@@ -269,6 +326,21 @@ async function executeRun(
       tensor.dispose()
     }
   }))
+  if (profileWebGpu) {
+    // Explicitly drain the device queue before reading ORT's asynchronous
+    // timestamp-map callbacks.
+    await awaitProfilingCallbacks()
+  }
+  const profileRecords = profileWebGpu
+    ? profilingRecords.slice(profilingStart)
+    : undefined
+  const profileSummary = profileRecords === undefined
+    ? undefined
+    : summarizeWebGpuProfiling(profileRecords)
+  const supportsTimestamps = timestampQuerySupported()
+  if (profilingRecords.length > 1_000_000) {
+    profilingRecords = profilingRecords.slice(profilingStart)
+  }
   const result: GraphRunResult = {
     outputs: Object.fromEntries(payloadEntries),
     timings: {
@@ -276,6 +348,26 @@ async function executeRun(
       readbackMs: performance.now() - readbackStart,
       totalMs: performance.now() - totalStart,
     },
+    ...(profileRecords === undefined
+      ? {}
+      : {
+          profile: {
+            requested: true,
+            availability: profileRecords.length > 0
+              ? 'available'
+              : supportsTimestamps
+                ? 'no-records'
+                : 'timestamp-query-unavailable',
+            timestampQuerySupported: supportsTimestamps,
+            records: profileRecords,
+            summary: profileSummary!,
+            inferenceWallMs: inferenceMs,
+            unaccountedWallMs: Math.max(
+              0,
+              inferenceMs - profileSummary!.summedGpuKernelMs,
+            ),
+          },
+        }),
   }
   status({
     stage: 'inference-complete',
@@ -314,8 +406,12 @@ async function run(request: RuntimeWorkerRequest & { type: 'run' }): Promise<Gra
   const record = sessions.get(request.sessionId)
   if (!record) throw new Error(`Graph '${request.sessionId}' is not loaded.`)
   status({ stage: 'inference-queued', message: `Queued '${request.sessionId}'.`, sessionId: request.sessionId })
-  const result = record.runTail.then(() => executeRun(request, record))
+  const ready = profilingConfigured
+    ? Promise.all([record.runTail, profilingRunTail]).then(() => undefined)
+    : record.runTail
+  const result = ready.then(() => executeRun(request, record))
   record.runTail = result.then(() => undefined, () => undefined)
+  if (profilingConfigured) profilingRunTail = record.runTail
   return result
 }
 

@@ -10,6 +10,10 @@ The browser package now contains a built-in DINO → VAE → staged DiT flow →
 
 The complete prepared-image package path now executes in Chrome/WebGPU: it stages all five verified graphs, runs the four-step pipeline, returns 262,144 finite Gaussians, produces valid-size PLY and `.splat` exports, and loads the PLY into a ready viewer canvas. This is a structural/export/viewer-load pass, not a whole-scene numerical or rendered-pixel comparison with official PyTorch. A `removeBackground` hook exists, but no bundled WebGPU-qualified BiRefNet artifact does; the measured 20-step browser loop exceeds its qualification envelope; and final whole-scene/render parity remains open. Deterministic lifecycle coverage now includes serialized generation, prompt queued cancellation, abort-and-retry worker recreation, failed-load ownership, and dispose during pending configuration. Production-origin CDN/OPFS behavior, repeated full-model browser generation, Microsoft Edge, and the 16 GB target remain unvalidated.
 
+Opt-in DiT diagnostics now configure WebGPU profiling before session creation, keep `ort.env.trace` separate, report per-session load time, and isolate warmed invocation 7 and invocation 8. The installed ORT 1.27 native WebGPU EP exposed timestamp queries but emitted no profiling callback records on the recorded Apple run. A lab-only `all` graph-optimization A/B reduced load and one warmed call, but the complete 20-step Mac run still failed numerical qualification and was 8.16% slower than the historical conservative run despite a 23.65% faster session load. Graph capture is incompatible with the current CPU-output contract. No production switch was made.
+
+The working Mac quality path now bypasses that inaccurate exported DiT reduction while preserving the browser pipeline around it. One authenticated loopback request sends the initial latent/camera and browser-produced DINO/VAE tensors to the untouched official fp32 PyTorch/MPS sampler; the service owns all 40 DiT calls, CFG, and Euler updates and returns only the final latent/camera. The unchanged official 20-step fixture is **bit-exact**: both hashes match, maximum error is zero, and qualification plus strict gates pass. On the recorded M3 Max, model load was 2,248.3 ms and sustained sampling was 347,092.6 ms. The portable WebGPU fallback remains available and remains numerically unqualified at 20 steps.
+
 ## Stage ledger
 
 | Stage | Implementation state | Validation state | Release consequence |
@@ -19,7 +23,7 @@ The complete prepared-image package path now executes in Chrome/WebGPU: it stage
 | Flux VAE encoder | Fixed-shape export, explicit epsilon, browser graph, and comparison lab exist | **PASS** against PyTorch fixture | First vertical slice complete |
 | One-step DiT | Fixed-shape fp32 graph with real RoPE, static Sobol positional data, chunked attention/output projection, and Q/K padding workaround exists | **STRICT PASS** in Chrome/WebGPU against untouched PyTorch | Single-invocation fp32 gate complete |
 | Four-step flow | TypeScript schedule, fp32 PyTorch-order CFG/Euler arithmetic, cancellation checks, final-state lab, teacher-forced replay, and 39 block-boundary probes exist | Eight WebGPU calls complete; **qualification PASS, stricter diagnostic FAIL**. The first material invocation-7/8 split is the `context_refiner.0` attention residual | Fast path executes, but the exported/ORT zero-context self-attention reduction remains a strict-parity defect |
-| Twenty-step flow | Official 20-step control path and fp32 fixture exist | All 40 WebGPU calls complete; **qualification FAIL and strict FAIL** from accumulated latent drift | A quality-path execution result exists, but no parity pass is claimed |
+| Twenty-step flow | Portable WebGPU loop plus opt-in authenticated Mac MPS service exist | WebGPU: all 40 calls complete but qualification/strict fail. Mac MPS: **BIT-EXACT PASS**, qualification and strict pass | Mac quality path is qualified on the recorded M3 Max; portable WebGPU remains unqualified |
 | Octree occupancy | Correctness-first TypeScript traversal, systematic resampling, compaction/expansion, jitter replay, plus fp32 ONNX graph exist | **PASS** across all eight official Chrome/WebGPU frontiers: active logits, padding independence, sampled counts, random consumption, and final points | Full octree boundary is qualified on the recorded machine; live downstream Gaussian scene remains open |
 | Gaussian decoder | fp32 ONNX graph and host decode/export code exist | Raw `[1,8192,480]` Chrome/WebGPU boundary **passes**; a small official `_build_gaussians` activation oracle passes; the live E2E run produces finite activated arrays | Whole-scene comparison against official PyTorch remains open |
 | Canonical Gaussian scene | Framework-neutral workspace package exists and the built-in pipeline returns its contract | Unit tests cover validation/disposal/exports; the E2E run returns 262,144 finite Gaussians, valid-size PLY/`.splat` files, and a ready viewer canvas | Scene execution/export/viewer loading is demonstrated; official whole-scene and rendered-pixel parity is not established |
@@ -28,6 +32,23 @@ The complete prepared-image package path now executes in Chrome/WebGPU: it stage
 | Viewer integration | Preserved SHARP viewer consumes the exported TripoSplat PLY | The E2E gate reached viewer-ready state with a 1916×954 drawing buffer | This is a renderer-load/canvas sanity result; TripoSplat visual parity remains unproven |
 
 ## Recorded numerical gates
+
+### Twenty-step Mac PyTorch/MPS sampler — bit-exact pass
+
+- untouched official source commit: `a78fa12d06dbf1381ca548bfac32bb68cb8c451d`;
+- official weights SHA-256: `c870b97ac1d6bc9177608a5ec625e19ef9f3c5019aa68f64b0fb7803abcd6d20`;
+- twenty shifted Euler steps, guidance 3, shift 3;
+- twenty conditional and twenty unconditional invocations;
+- M3 Max model load: 2,248.3 ms;
+- M3 Max sampling inference: 347,092.6 ms;
+- request wall including 23.62 MB upload and 0.52 MB response: 347,422.2 ms;
+- latent and camera output hashes: exact fixture matches;
+- latent maximum/mean/RMSE error: 0;
+- camera maximum/mean/RMSE error: 0;
+- qualification gate: **passed**;
+- stricter diagnostic: **passed**.
+
+The service is loopback-only, token-authenticated, and refuses source or weight revisions other than the recorded official artifacts. The browser package makes one request for the complete sampler and skips loading the 1.64 GB WebGPU DiT artifact on this path. WebGPU remains the fallback when `macMpsFlow` is omitted. Evidence: [`docs/validation/2026-07-18-flow20-mac-mps-service.json`](validation/2026-07-18-flow20-mac-mps-service.json).
 
 ### DINOv3 browser slice — strict pass
 
@@ -133,6 +154,8 @@ All 40 WebGPU invocations completed without fallback. The recorded qualification
 
 A separate community report from a user identifying the GPU as an RTX 3090 completed the public fp32 20-step path from a warm 6.02 GiB OPFS cache in 472.2 seconds on Linux/Chrome 148. Chromium exposed `nvidia ampere`; 301.9 seconds were reported as DiT inference, sampling overhead above that was about 3.1 seconds, and DiT readback totaled 7 milliseconds. The user found 20-step output visibly acceptable and four-step output inadequate. This is useful external performance and product evidence, not a repository-controlled hardware or parity qualification. It makes per-call DiT execution, session setup, retained-session experiments, and carefully qualified mixed precision higher priorities than reducing the quality schedule. Evidence: [`performance analysis`](rtx3090-20-step-performance.md) and [`community report`](benchmarks/2026-07-18-rtx3090-community-warm-opfs-fp32.json).
 
+The repository-controlled paired DiT A/B on Apple `metal-3` recorded canonical load/warmed-invocation-7 times of 15,557.4/12,993.7 ms and lab-only `all` times of 10,251.4/11,844.3 ms. Invocation 7 passed unchanged strict gates in both; invocation 8 remained failed. The required follow-up ran all 40 calls: `all` loaded in 9,552.0 ms but took 731,902.9 ms for sampling, 8.16% slower than the historical 676,669.1 ms conservative run. Its final latent max/mean/RMSE improved to `0.0483210` / `0.000320900` / `0.000748286`, but qualification and strict gates still failed. `all` therefore remains lab-only. Evidence: [`profiling analysis`](dit-webgpu-profiling.md), [`paired result`](benchmarks/2026-07-18-dit-webgpu-profile-apple-metal3.json), and [`complete optimized run`](benchmarks/2026-07-18-flow20-fp32-webgpu-optimization-all.json).
+
 ### Context0 K=256 value reduction — improved trajectory, deployment no-go
 
 An opt-in graph split only `context_refiner.0` probability×V into 256-key partial MatMuls and a balanced Add tree. It reduced complete 20-step latent max/mean/RMSE from `0.0487093` / `0.000351717` / `0.000812052` to `0.0416024` / `0.000240853` / `0.000566224`, but still failed the existing trajectory tolerance. Invocation 7 maximum error regressed slightly (`4.3750e-5` → `4.4525e-5`), while invocation 8 improved slightly (`7.6425e-4` → `7.5686e-4`).
@@ -232,7 +255,7 @@ The package must not be described as production-usable until all of these gates 
 
 1. integrate and qualify a browser-local BiRefNet graph through the existing `removeBackground` hook, or fully validate the production prepared-input contract;
 2. compare the live activated/packed scene with an official PyTorch whole-scene reference, including export orientation and a rendered result;
-3. probe Q/K normalization, logits, softmax, value accumulation, and projection inside the now-localized `context_refiner.0` zero-context attention failure; then correct the confirmed reduction with a multiplicity-equivalent collapsed context or fused controlled reduction and re-run the strict/final-scene gates;
+3. preserve full-query geometry and identify a runtime-compatible controlled probability×V reduction for `context_refiner.0`; repeated-V bypass, collapsed context, K=256, and raw packed-buffer WGSL variants are rejected, so any new candidate must improve paired invocations 7/8 before the full strict/final-scene gates;
 4. diagnose or bound the measured 20-step accumulated drift enough to pass an output-sensitivity-backed quality gate;
 5. exercise cancellation, retry, repeated generation, worker termination, CDN failures, and persistent OPFS/Cache API behavior in real browsers without reloading the page;
 6. extend the now-passing full packed-Vite browser execution to actual Next.js and native-ESM browser runs; their current package checks cover client TypeScript and import-map resolution only;

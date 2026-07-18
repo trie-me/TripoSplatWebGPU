@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-07-18",
+  "repositoryControlled": true,
+  "component": "context_refiner.0_probability_times_v",
+  "candidate": "repeated-v-bypass",
+  "source": {
+    "captureRoot": "/private/tmp/dit-attention-parity-20260716/captures",
+    "officialImplementation": "untouched TripoSplat PyTorch",
+    "officialRevision": "a78fa12d06dbf1381ca548bfac32bb68cb8c451d"
+  },
+  "invocation7": {
+    "pass": "conditional",
+    "vShape": [1, 16, 4101, 64],
+    "weightedValueShape": [1, 16, 4, 64],
+    "vRowsExactlyRepeated": false,
+    "vRowMaxAbsoluteDifference": 10.485879898071289,
+    "officialWeightedValueVersusRepeatedFirstV": {
+      "maxAbsoluteError": 5.572382688522339,
+      "meanAbsoluteError": 0.8929186950586374,
+      "rmse": 1.1354424172097128
+    },
+    "sha256": {
+      "vTransposedNpy": "0279e75f59666ae992eaeff66d90580b4010d607e5a6338694a2172ea929c157",
+      "weightedValueTransposedNpy": "883839792fffc7ddce299c85969c0d734f2d3230cd26ba1f0c69d774c234a4b4"
+    }
+  },
+  "invocation8": {
+    "pass": "unconditional",
+    "vShape": [1, 16, 4101, 64],
+    "weightedValueShape": [1, 16, 4, 64],
+    "vRowsExactlyRepeated": true,
+    "vRowMaxAbsoluteDifference": 0,
+    "officialWeightedValueVersusRepeatedFirstV": {
+      "maxAbsoluteError": 0.00019693374633789062,
+      "meanAbsoluteError": 0.00003098239724863561,
+      "rmse": 0.00004544735287655039
+    },
+    "canonicalOrtCpuWeightedValueRmseVersusOfficial": 0.00004535431496740589,
+    "sha256": {
+      "vTransposedNpy": "21fd0a93ea844fd6a305e4ff1fd6dffe0ca563b9cb3699aa5c90fa7ee25cb3c4",
+      "weightedValueTransposedNpy": "b996fc9663998f1879834a4f3e008983399fcc9d0bd8e960f87436f9a8d81bc9"
+    }
+  },
+  "decision": "rejected-before-graph-build",
+  "reason": "The bypass is invalid for conditional invocation 7. Even for repeated-V invocation 8, untouched official PyTorch does not return the representative V exactly, and bypass RMSE is slightly worse than canonical ORT CPU. It is therefore neither official-operation equivalent nor a paired-invocation improvement."
+}

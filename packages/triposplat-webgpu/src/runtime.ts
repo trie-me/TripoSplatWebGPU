@@ -6,6 +6,7 @@ import {
   TripoSplatError,
 } from './errors.js'
 import type { ResolvedGraphManifestEntry } from './manifest.js'
+import type { WebGpuRunProfile } from './profiling.js'
 import { assertTensorMap, tensorTransferables, type TensorMap } from './tensors.js'
 import type { ExecutionProvider } from './types.js'
 
@@ -13,6 +14,13 @@ export interface RuntimeConfiguration {
   wasmPaths?: string | { mjs?: string; wasm?: string }
   wasmThreads?: number
   wasmSimd?: boolean | 'fixed' | 'relaxed'
+  /** Separate ONNX Runtime trace stream. Disabled by default. */
+  trace?: boolean
+  /**
+   * Install the WebGPU timestamp callback before the first session is created.
+   * Individual runs still require RunGraphOptions.profileWebGpu.
+   */
+  webgpuProfiling?: boolean
 }
 
 export interface RuntimeStatus {
@@ -68,6 +76,8 @@ export interface RunGraphOptions {
   signal?: AbortSignal
   /** Defaults to true; transferred input arrays are detached. */
   transferInputs?: boolean
+  /** Collect ONNX Runtime WebGPU kernel timestamps for this diagnostic run. */
+  profileWebGpu?: boolean
 }
 
 export interface GraphRunResult {
@@ -77,6 +87,8 @@ export interface GraphRunResult {
     readbackMs: number
     totalMs: number
   }
+  /** Present only for an explicitly profiled run. */
+  profile?: WebGpuRunProfile
 }
 
 export interface TripoSplatRuntime {
@@ -109,6 +121,7 @@ interface WorkerRunRequest {
   reusableInputsId?: string
   outputs?: readonly string[]
   tag?: string
+  profileWebGpu?: boolean
 }
 
 interface WorkerRetainInputsRequest {
@@ -447,6 +460,7 @@ class WorkerRuntime implements TripoSplatRuntime {
     if (options.signal?.aborted) throw new CancelledError(undefined, { cause: options.signal.reason })
     if (options.outputs !== undefined) request.outputs = options.outputs
     if (options.tag !== undefined) request.tag = options.tag
+    if (options.profileWebGpu !== undefined) request.profileWebGpu = options.profileWebGpu
     const transfer = options.transferInputs === false ? [] : tensorTransferables(request.inputs)
     try {
       const result = await this.sendWithSignal(request, transfer, options.signal)

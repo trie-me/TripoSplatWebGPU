@@ -1,5 +1,6 @@
 ---
 title: TripoSplat WebGPU
+short_description: Browser-local image-to-3D Gaussian splat generation with WebGPU.
 emoji: 🫧
 colorFrom: blue
 colorTo: purple
@@ -11,7 +12,7 @@ models:
 
 # TripoSplat WebGPU
 
-Generate a Gaussian splat from an image entirely in your browser with WebGPU. The static app runs model inference and exports locally; it does not use Hugging Face inference compute.
+Run the full TripoSplat image-to-3D pipeline locally in a WebGPU browser. Starting from a single image, the app performs image conditioning, flow sampling, octree construction, and Gaussian decoding, then previews the generated 3D Gaussian splat and exports binary PLY and browser `.splat` files. Hugging Face hosts the static app and model artifacts; it does not provide inference compute.
 
 ## Before you run
 

@@ -66,6 +66,21 @@
 .model-panel label span { color: #d9deeb; font-size: .76rem; font-weight: 600; }
 .model-panel label small { color: #6f778b; font: .58rem/1.4 var(--mono); }
 .model-status { min-height: 76px; padding: 13px; border-left: 1px solid var(--line-bright); color: var(--muted); background: rgba(0,0,0,.18); font: .6rem/1.65 var(--mono); }
+.mps-connection { display: grid; gap: 13px; margin: 20px 0; padding: 17px; border: 1px solid rgba(255,190,83,.34); background: linear-gradient(120deg, rgba(255,190,83,.055), rgba(88,230,255,.025)); }
+.mps-connection[data-state="ready"] { border-color: rgba(198,255,74,.4); background: linear-gradient(120deg, rgba(198,255,74,.065), rgba(88,230,255,.03)); }
+.mps-connection[data-state="error"] { border-color: rgba(255,111,145,.42); }
+.mps-connection-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.mps-connection-heading h3 { margin: 5px 0 0; color: #e5ebf5; font-size: .86rem; }
+#mps-connection-badge { padding: 7px 9px; border: 1px solid currentColor; color: #ffca71; font: .58rem var(--mono); white-space: nowrap; }
+.mps-connection[data-state="ready"] #mps-connection-badge { color: var(--lime); }
+.mps-connection[data-state="error"] #mps-connection-badge { color: #ff9bb3; }
+.mps-connection > p { margin: 0; color: #aeb8c8; font: .67rem/1.6 var(--mono); }
+.mps-connection-fields { display: grid; grid-template-columns: minmax(190px, .75fr) minmax(220px, 1fr) auto; gap: 10px; align-items: end; }
+.mps-connection-fields label { min-width: 0; }
+.mps-connection-fields button { min-height: 43px; padding: 0 14px; border-color: rgba(198,255,74,.42); color: var(--lime); background: rgba(198,255,74,.06); font: .63rem var(--mono); text-transform: uppercase; }
+#mps-connection-status[data-state="ready"] { color: var(--lime); }
+#mps-connection-status[data-state="error"] { color: #ff9bb3; }
+@media (max-width: 900px) { .mps-connection-fields { grid-template-columns: 1fr; } }
 .primary-action { display: flex; width: 100%; align-items: center; justify-content: space-between; min-height: 59px; margin-top: 23px; padding: 0 20px; border-color: var(--lime); color: #0b0e0a; background: var(--lime); font-weight: 800; }
 .primary-action b { font-size: 1.2rem; }
 .primary-action.is-working { color: #d9edaf; border-color: #758c3d; background: #263214; }

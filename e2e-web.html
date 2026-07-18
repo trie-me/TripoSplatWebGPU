@@ -5,16 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#070a12" />
-    <meta name="description" content="Generate a Gaussian splat from an image using browser-local WebGPU." />
+    <meta name="description" content="Run TripoSplat V2 with browser WebGPU and the bit-exact official 20-step fp32 sampler on local Mac MPS." />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="TripoSplat WebGPU · Image to 3D Offline Local" />
-    <meta property="og:description" content="Generate a Gaussian splat from an image using browser-local WebGPU." />
+    <meta property="og:title" content="TripoSplat WebGPU V2 · Exact 20-Step Mac Runner" />
+    <meta property="og:description" content="Browser WebGPU around the bit-exact official 20-step fp32 sampler on local Mac MPS." />
     <meta property="og:image" content="https://triposplat-webgpu.vercel.app/corgi.ceo_image_header.social.jpg" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="TripoSplat WebGPU · Image to 3D Offline Local" />
-    <meta name="twitter:description" content="Generate a Gaussian splat from an image using browser-local WebGPU." />
+    <meta name="twitter:title" content="TripoSplat WebGPU V2 · Exact 20-Step Mac Runner" />
+    <meta name="twitter:description" content="Browser WebGPU around the bit-exact official 20-step fp32 sampler on local Mac MPS." />
     <meta name="twitter:image" content="https://triposplat-webgpu.vercel.app/corgi.ceo_image_header.social.jpg" />
-    <title>TripoSplat WebGPU · Image to 3D Offline Local</title>
+    <title>TripoSplat WebGPU V2 · Exact 20-Step Mac Runner</title>
     <link rel="stylesheet" href="/src/e2e-web.css" />
   </head>
   <body>
@@ -30,10 +30,10 @@
     <main id="main-content" class="app-shell web-app">
       <header class="web-hero">
         <div class="eyebrow"><span>Image to 3D Model. </span></div>
-        <h1><em>Offline. Local. Portable.</em></h1>
-        <p>Your browser uses WebGPU to run the full TripoSplat model locally.<br />
-The ≈6.5 GB model package downloads once, verifies, and stays in offline browser storage.<br />
-After that, it is ready to run again without another model download.</p>
+        <h1>Exact 20-Step.<br /><em>On Your Mac.</em></h1>
+        <p>V2 combines browser WebGPU conditioning and spatial decoding with the untouched official fp32 flow sampler on local Apple MPS.<br />
+The final 20-step latent and camera match the official fixture bit-for-bit, while the inaccurate and slower WebGPU DiT is not downloaded.<br />
+Your image and flow tensors stay on your device.</p>
         <div class="hero-actions"><a class="github-link" href="#source-heading">Try it out <span aria-hidden="true">↘</span></a><a class="hero-text-link" href="#browser-experiment">Why this matters <span aria-hidden="true">↓</span></a></div>
       </header>
       <section class="compatibility-panel" aria-labelledby="compatibility-heading">
@@ -72,8 +72,18 @@ After that, it is ready to run again without another model download.</p>
       </div>
 
       <section class="model-panel panel" aria-labelledby="model-heading">
-        <div class="panel-heading"><div><span class="section-index">STEP 2 / BROWSER ENGINE</span><h2 id="model-heading">Preparing the model</h2></div><span id="cache-mode" class="local-badge">CACHE CHECK</span></div>
-        <p class="panel-copy">Your first run downloads roughly 6.47 GB from the official browser-runtime package, verifies every file, and stores it locally when your browser permits it. You only need to choose an image.</p>
+        <div class="panel-heading"><div><span class="section-index">STEP 2 / EXACT MAC ENGINE</span><h2 id="model-heading">Preparing the model</h2></div><span id="cache-mode" class="local-badge">CACHE CHECK</span></div>
+        <p class="panel-copy">V2 keeps image conditioning and spatial decoding in WebGPU, then runs all 40 flow calls through the bit-exact official fp32 sampler on your Mac. The inaccurate 1.64 GB WebGPU DiT artifact is skipped.</p>
+        <section class="mps-connection" id="mps-connection" data-state="idle" aria-labelledby="mps-connection-heading">
+          <div class="mps-connection-heading"><div><span class="section-index">REQUIRED / MAC V2</span><h3 id="mps-connection-heading">Connect the local MPS sampler</h3></div><span id="mps-connection-badge">NOT CONNECTED</span></div>
+          <p>Start the v2 Mac launcher, then use its authenticated link or paste the printed token here. Tensor traffic stays on loopback; the service refuses non-official source and weight revisions.</p>
+          <div class="mps-connection-fields">
+            <label for="mps-service-url"><span>Local service</span><input id="mps-service-url" type="url" inputmode="url" value="http://127.0.0.1:8765/" autocomplete="off" spellcheck="false" /></label>
+            <label for="mps-service-token"><span>Startup token</span><input id="mps-service-token" type="password" autocomplete="off" spellcheck="false" placeholder="Paste the launcher token" /></label>
+            <button id="mps-connect" type="button">Connect exact 20-step engine</button>
+          </div>
+          <p id="mps-connection-status" role="status" aria-live="polite">Waiting for the authenticated local Mac service.</p>
+        </section>
         <div class="model-layout"><div id="model-status" class="model-status" aria-live="polite">Checking model and browser storage…</div></div>
         <details class="model-advanced"><summary>Use a different model server</summary><label for="model-base"><span>Model CDN directory</span><small>Must contain manifest.json and allow CORS requests from this site.</small><input id="model-base" type="url" inputmode="url" autocomplete="url" spellcheck="false" /></label></details>
         <button id="generate" class="primary-action" type="button" disabled><span>Choose an image to begin</span><b aria-hidden="true">↗</b></button>
@@ -85,7 +95,7 @@ After that, it is ready to run again without another model download.</p>
             <li data-flow-stage="source" data-state="active" aria-current="step"><span class="flow-marker">01</span><div><strong>Source image</strong><span>Inspect alpha and prepare local pixels.</span></div><small>READY</small></li>
             <li data-flow-stage="model" data-state="waiting"><span class="flow-marker">02</span><div><strong>Model package</strong><span>Verify manifest, integrity, and browser cache.</span></div><small>WAITING</small></li>
             <li data-flow-stage="conditioning" data-state="waiting"><span class="flow-marker">03</span><div><strong>Conditioning</strong><span>Preprocess → DINOv3 → Flux VAE.</span></div><small>WAITING</small></li>
-            <li data-flow-stage="sampling" data-state="waiting"><span class="flow-marker">04</span><div><strong>Flow sampler</strong><span>20 official steps · 40 CFG DiT calls.</span></div><small>WAITING</small></li>
+            <li data-flow-stage="sampling" data-state="waiting"><span class="flow-marker">04</span><div><strong>Exact Mac flow</strong><span>20 official fp32 steps · 40 MPS DiT calls.</span></div><small>WAITING</small></li>
             <li data-flow-stage="decode" data-state="waiting"><span class="flow-marker">05</span><div><strong>Spatial decode</strong><span>Octree occupancy → Gaussian decoder.</span></div><small>WAITING</small></li>
             <li data-flow-stage="preview" data-state="waiting"><span class="flow-marker">06</span><div><strong>Scene handoff</strong><span>Encode PLY / .splat and swap the viewer.</span></div><small>WAITING</small></li>
           </ol>

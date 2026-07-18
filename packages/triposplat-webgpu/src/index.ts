@@ -6,6 +6,11 @@ export type {
   TripoSplatWebGPUOptions,
 } from './triposplat.js'
 export { runBuiltInTripoSplatPipeline } from './pipeline.js'
+export { runMacMpsFlow } from './mac-mps-flow.js'
+export type {
+  MacMpsFlowRequest,
+  MacMpsFlowResult,
+} from './mac-mps-flow.js'
 export { clearModelCache, getModelCacheStatus } from './modelCache.js'
 export type {
   ModelCacheBackendStatus,
@@ -77,6 +82,7 @@ export type {
   LoadProgress,
   LoadStage,
   LogLevel,
+  MacMpsFlowBackendOptions,
   PipelineCapabilities,
   Precision,
   TripoSplatGraphName,
