@@ -126,6 +126,12 @@ The follow-up 39-boundary probe localizes the first material divergence to the a
 
 The control loop completed all 40 WebGPU invocations without fallback. This is a measured failure from accumulated final-state drift, not an extrapolation or an incomplete run.
 
+### Community RTX 3090-class warm-cache field report
+
+A user identifying the GPU as an RTX 3090 supplied a Linux/Chrome 148 public-runner report; Chromium exposed the adapter as `nvidia ampere`. With the full 6.02 GiB OPFS cache already present, zero bytes downloaded, fp32 precision, and the 20-step/40-call schedule, end-to-end wall time was 472.2 seconds. Sampling consumed 305.0 seconds, of which reported DiT inference was 301.9 seconds (about 7.55 seconds per call); all DiT readback totaled 7 milliseconds. DINO, VAE, octree, and Gaussian inference totaled 12.16 seconds.
+
+This self-reported run is not a controlled hardware qualification and does not independently prove the exact GPU SKU, numerical parity, peak VRAM, driver version, or ONNX Runtime version. It nevertheless narrows the performance diagnosis: readback and host CFG/Euler work are not the primary bottlenecks, while fp32 DiT execution and approximately 93 seconds of inferred graph/session setup overhead are the useful targets. The user also reported that 20 steps produced visibly acceptable output while four steps was too low quality, so reducing the public quality path to four steps is not an acceptable optimization. Evidence and next actions: [`RTX 3090-class 20-step performance`](rtx3090-20-step-performance.md) and [`machine-readable community report`](benchmarks/2026-07-18-rtx3090-community-warm-opfs-fp32.json).
+
 ### Eight-level fp32 octree trajectory
 
 | Metric | Value |

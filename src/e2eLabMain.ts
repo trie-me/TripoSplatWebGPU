@@ -55,6 +55,11 @@ const SPLAT_BYTES_PER_GAUSSIAN = 32
 const VIEWER_LOAD_TIMEOUT_MS = 90_000
 const MAX_PROGRESS_RECORDS = 5_000
 const MAX_RUN_HISTORY = 20
+const QUALIFICATION_CAMERA = {
+  position: [1.5, 1.5, 1.5] as [number, number, number],
+  target: [0, 0, 0] as [number, number, number],
+  up: [0, 1, 0] as [number, number, number],
+} as const
 
 interface GenerationParameters {
   steps: 4 | 20
@@ -1100,6 +1105,9 @@ async function loadPlyInViewer(
             fov: 45,
             autoRotate: false,
             maxScreenSize: 1024,
+            initialCameraPosition: QUALIFICATION_CAMERA.position,
+            initialCameraTarget: QUALIFICATION_CAMERA.target,
+            initialCameraUp: QUALIFICATION_CAMERA.up,
             splatPosition: [0, 0, 0],
             splatRotation: [0, 0, 0],
             splatFlip: [false, false, false],

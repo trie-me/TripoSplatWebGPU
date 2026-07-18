@@ -1,6 +1,6 @@
 # Current status and release gates
 
-Recorded 2026-07-15. This document is the source of truth for what the repository can demonstrate today. A code path existing in TypeScript is not treated as numerically complete until its graph artifact exists and its output has been compared with the untouched official TripoSplat PyTorch implementation.
+Updated 2026-07-18. This document is the source of truth for what the repository can demonstrate today. A code path existing in TypeScript is not treated as numerically complete until its graph artifact exists and its output has been compared with the untouched official TripoSplat PyTorch implementation.
 
 ## Milestone summary
 
@@ -112,7 +112,7 @@ A paired fresh-process diagnostic uses the exact same step-4 latent, camera, and
 
 A 39-boundary invocation-7/8 probe now finds the first material split at `context_refiner.0`'s self-attention residual, before its MLP or any joint block. At that boundary, CPU ORT versus official PyTorch has `3.0994e-6` conditional maximum error and `1.1063e-4` unconditional maximum error, a 35.69× separation. Adapted PyTorch remains within tolerance at `6.6757e-6` on the unconditional path, while ORT versus adapted PyTorch fails at `1.1730e-4`. Both noise refiners remain matched, and the unconditional error grows to `2.1186e-3` by joint block 23. This proves the initiating drift lies in exported/ORT context self-attention execution rather than the adapter rewrite.
 
-The next bounded experiment is inside `context_refiner.0`: probe Q/K normalization, logits, softmax, value accumulation, and output projection. Only if that isolates the reduction should the port test a mathematically collapsed unconditional context with multiplicity-aware joint attention or a fused WGSL online-softmax path. More RMS or RoPE variants are not justified by these results. Evidence: [`block-boundary report`](validation/2026-07-15-dit-flow4-invocations07-08-block-probes.json), [`conditional invocation 7`](validation/2026-07-15-dit-step-flow4-invocation07-fp32-onnx-strict.json), [`unconditional invocation 8`](validation/2026-07-15-dit-step-flow4-invocation08-fp32-onnx-strict.json), and [`projection A/B`](validation/2026-07-15-dit-invocation08-legacy-projection-cpu.json).
+The bounded `context_refiner.0` experiment is now complete. Detailed probes confirm probability×V as the first actionable reduction boundary, and the K=256 balanced-tree candidate improves the full 20-step trajectory but remains outside tolerance and too slow for deployment. More RMS, RoPE, token-collapse, or second-context-layer variants are not justified by the evidence. The remaining useful direction is a runtime-compatible attention lowering that improves the complete autoregressive trajectory without the K=256 overhead. Evidence: [`block-boundary report`](validation/2026-07-15-dit-flow4-invocations07-08-block-probes.json), [`candidate findings`](context0-value-reduction-candidate.md), and [`candidate result`](validation/2026-07-17-context0-k256-candidate.json).
 
 ### Twenty-step fp32 CFG/Euler loop — completed, qualification fail
 
@@ -130,6 +130,14 @@ The next bounded experiment is inside `context_refiner.0`: probe Q/K normalizati
 - camera cosine similarity: 0.9999999807.
 
 All 40 WebGPU invocations completed without fallback. The recorded qualification envelope is `atol=0.005`, `rtol=0.003`, minimum cosine 0.99999998. The camera passes, but the latent misses both the elementwise and cosine requirements, so the overall result fails. The strict diagnostic also fails. Evidence: [`docs/benchmarks/2026-07-15-flow20-fp32-webgpu.json`](benchmarks/2026-07-15-flow20-fp32-webgpu.json).
+
+A separate community report from a user identifying the GPU as an RTX 3090 completed the public fp32 20-step path from a warm 6.02 GiB OPFS cache in 472.2 seconds on Linux/Chrome 148. Chromium exposed `nvidia ampere`; 301.9 seconds were reported as DiT inference, sampling overhead above that was about 3.1 seconds, and DiT readback totaled 7 milliseconds. The user found 20-step output visibly acceptable and four-step output inadequate. This is useful external performance and product evidence, not a repository-controlled hardware or parity qualification. It makes per-call DiT execution, session setup, retained-session experiments, and carefully qualified mixed precision higher priorities than reducing the quality schedule. Evidence: [`performance analysis`](rtx3090-20-step-performance.md) and [`community report`](benchmarks/2026-07-18-rtx3090-community-warm-opfs-fp32.json).
+
+### Context0 K=256 value reduction — improved trajectory, deployment no-go
+
+An opt-in graph split only `context_refiner.0` probability×V into 256-key partial MatMuls and a balanced Add tree. It reduced complete 20-step latent max/mean/RMSE from `0.0487093` / `0.000351717` / `0.000812052` to `0.0416024` / `0.000240853` / `0.000566224`, but still failed the existing trajectory tolerance. Invocation 7 maximum error regressed slightly (`4.3750e-5` → `4.4525e-5`), while invocation 8 improved slightly (`7.6425e-4` → `7.5686e-4`).
+
+The candidate completed Gaussian decode with 262,144 finite Gaussians, valid PLY and `.splat` exports, and a ready viewer. Visual improvement is unproven because two canonical E2E attempts reset before producing paired exports. Runtime was approximately 6.96% slower in teacher-forced measurement and 20.84% slower than the historical canonical full-flow run. A two-layer extension regressed and was removed. The production graph and manifest remain canonical; this candidate is **not deployment-qualified**. Evidence: [`candidate findings`](context0-value-reduction-candidate.md) and [`machine-readable result`](validation/2026-07-17-context0-k256-candidate.json).
 
 ### Eight-level octree neural and host trajectory — pass
 

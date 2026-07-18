@@ -1,0 +1,27 @@
+{
+  "date": "2026-07-17",
+  "component": "context_refiner_0_k256_probability_value_balanced_add_tree",
+  "deploymentCandidate": false,
+  "decision": {"status": "no-go", "reason": "Full 20-step tolerance remains unmet; runtime overhead and controlled canonical E2E visual comparison are insufficient."},
+  "canonicalProductionChanged": false,
+  "candidate": {
+    "option": "--context0-attention-value-chunk 256",
+    "semantics": "Explicit fp32 scores and softmax; 17 256-key probability×V MatMuls followed by a balanced Add tree in context_refiner.0 only.",
+    "graph": {"bytes": 11078714, "sha256": "bbc1df17ddbf77326e516ad8a5f0f8de6bc7be4b65e0e8a9857dcbca7fb4ce4e", "transferIncreaseBytes": 393100},
+    "sidecar": {"bytes": 1633210368, "sha256": "eacadf21577a976ce0a635cf8b1bbdb4b2c0cdb9cb55d4d73af87957c1e72023"}
+  },
+  "attentionBoundaryVsUntouchedOfficial": {
+    "7": {"pass": "conditional", "weightedValue": {"max": 0.0000015497207641601562, "rmse": 0.0000001671486443413578}, "postProjection": {"max": 0.000010967254638671875, "rmse": 0.00000029818101776610686}},
+    "8": {"pass": "unconditional", "weightedValue": {"max": 0.00020051002502441406, "rmse": 0.0000453580119294561}, "postProjection": {"max": 0.0008392333984375, "rmse": 0.00006078548482083165}}
+  },
+  "invocationLatentVsUntouchedOfficial": {
+    "7": {"canonical": {"max": 0.00004374980926513672, "mean": 0.000004037556525449126, "rmse": 0.0000052590675893104175}, "k256": {"max": 0.0000445246696472168, "mean": 0.000004035024907866891, "rmse": 0.000005256688563206934}},
+    "8": {"canonical": {"max": 0.0007642507553100586, "mean": 0.00004303711813902211, "rmse": 0.0000566413873472652}, "k256": {"max": 0.0007568597793579102, "mean": 0.00004303206057043596, "rmse": 0.000056620928447813805}}
+  },
+  "full20StepBrowserLatent": {"canonical": {"max": 0.04870927333831787, "mean": 0.0003517169805631326, "rmse": 0.0008120518480388128}, "k256": {"max": 0.041602373123168945, "mean": 0.00024085289428033008, "rmse": 0.000566224326280334}, "improvementPercent": {"max": 14.5904, "mean": 31.5208, "rmse": 30.2724}, "passedExistingTolerance": false},
+  "teacherForced": {"canonicalInferenceMs": 107931.5, "k256InferenceMs": 115440.6, "slowdownPercent": 6.96, "invocation8": {"canonical": {"max": 0.0008442432153970003, "rmse": 0.00007077044059907788}, "k256": {"max": 0.0008364401292055845, "rmse": 0.00007075706032152625}}},
+  "e2eDecode": {"completed": true, "gaussianCount": 262144, "finite": true, "ply": {"bytes": 17826208, "sha256": "1047acc96a5bab4d0b153c4a56474aebea9b582f626947b30e56bd267976a7fa"}, "splat": {"bytes": 8388608, "sha256": "d5b3d0a86573ac6dbdb9c27443b4049f6269842363df130dd68b7a9f9a88ce58"}, "viewerReady": true, "geometry": {"activeVoxels128": 21995, "meanScale": 0.002636926548643818, "meanOpacity": 0.8384054080879488}},
+  "visualComparison": {"controlledCanonicalExportAvailable": false, "improved": null, "note": "Two canonical 20-step browser attempts reset during DiT before exports."},
+  "runtimeAndMemory": {"candidateFullFlowInferenceMs": 817523.6, "historicalCanonicalFullFlowInferenceMs": 676525.5, "crossRunSlowdownPercent": 20.84, "peakGpuMemoryMeasured": false, "algorithmicTemporaryBytes": {"onePartialApprox": 1048576, "seventeenPartialsApprox": 17825792, "balancedTreeConcurrentApprox": 27262976, "scoreOrProbabilityApprox": 67190784}},
+  "rejectedTwoLayerIteration": {"graphSha256": "04409acfefa944850da02759c3976962d5535e0adbad43ee7d7855359b474c77", "invocation7Max": {"k256": 0.0000445246696472168, "twoLayer": 0.00004506111145019531}, "invocation8": {"k256Mean": 0.00004303206057043596, "twoLayerMean": 0.00004303751164602687, "k256Rmse": 0.000056620928447813805, "twoLayerRmse": 0.0000566324886625266}, "retainedInSource": false}
+}

@@ -127,6 +127,29 @@ export class InferenceError extends TripoSplatError {
   }
 }
 
+const WEBGPU_DEVICE_LOST_MESSAGE = /(?:\[device\]\s+is\s+lost|\bgpudevice\b.*\blost\b|\bdevice\s+(?:is|was\s+)?lost\b)/i
+
+/** Returns true when an error or one of its causes reports a lost WebGPU device. */
+export function isWebGpuDeviceLostError(value: unknown): boolean {
+  const visited = new Set<object>()
+  let current = value
+  for (let depth = 0; depth < 8 && current !== undefined && current !== null; depth += 1) {
+    if (typeof current === 'string') return WEBGPU_DEVICE_LOST_MESSAGE.test(current)
+    if (typeof current !== 'object') return false
+    if (visited.has(current)) return false
+    visited.add(current)
+    const candidate = current as { message?: unknown; cause?: unknown; diagnostics?: unknown }
+    if (typeof candidate.message === 'string' && WEBGPU_DEVICE_LOST_MESSAGE.test(candidate.message)) return true
+    if (
+      typeof candidate.diagnostics === 'object'
+      && candidate.diagnostics !== null
+      && (candidate.diagnostics as { reason?: unknown }).reason === 'webgpu-device-lost'
+    ) return true
+    current = candidate.cause
+  }
+  return false
+}
+
 export class OutOfMemoryError extends TripoSplatError {
   constructor(message: string, options: SpecializedOptions = {}) {
     super(message, { ...options, code: 'OUT_OF_MEMORY', stage: 'inference', recoverable: true })

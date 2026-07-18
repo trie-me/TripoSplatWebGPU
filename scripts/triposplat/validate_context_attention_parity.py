@@ -1063,6 +1063,7 @@ def validate(args: argparse.Namespace) -> dict[str, Any]:
         rms_norm_eps=config["rms_norm_eps"],
         attention_output_chunk=config["attention_output_chunk"],
         attention_output_reduction_chunk=config["attention_output_reduction_chunk"],
+        context0_attention_value_chunk=config["context0_attention_value_chunk"],
     )
     adapted_graph = make_browser_flow_step(torch, model, config["precision"])
     adapted_capture = ContextAttentionCapture(model)

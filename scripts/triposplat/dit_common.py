@@ -90,6 +90,7 @@ class AdapterMetadata:
     static_position_dtype: str
     static_position_sha256: str
     collapsed_unconditional_context: bool = False
+    context0_attention_value_chunk: int | None = None
 
 
 def resolved_file(path: Path, description: str) -> Path:
@@ -397,6 +398,7 @@ def _scaled_dot_product_attention_query_chunked(
     collapsed_unconditional_context: bool,
     head_chunk_size: int,
     head_padding_size: int,
+    value_reduction_chunk: int | None = None,
 ) -> Any:
     """Official SDPA split along independent head and query-token axes.
 
@@ -424,6 +426,10 @@ def _scaled_dot_product_attention_query_chunked(
         raise ValueError("head_chunk_size must be a positive integer")
     if not isinstance(head_padding_size, int) or head_padding_size < 0:
         raise ValueError("head_padding_size must be a non-negative integer")
+    if value_reduction_chunk is not None and (
+        not isinstance(value_reduction_chunk, int) or value_reduction_chunk <= 0
+    ):
+        raise ValueError("value_reduction_chunk must be None or a positive integer")
     if qkv is not None:
         q, k, v = qkv.unbind(dim=2)
     elif kv is not None:
@@ -489,7 +495,7 @@ def _scaled_dot_product_attention_query_chunked(
             head_q = torch.cat((head_q, head_q[:, :head_padding_size, :, :]), dim=1)
             head_k = torch.cat((head_k, head_k[:, :head_padding_size, :, :]), dim=1)
             head_v = torch.cat((head_v, head_v[:, :head_padding_size, :, :]), dim=1)
-        if not use_collapsed_attention:
+        if not use_collapsed_attention and value_reduction_chunk is None:
             query_chunks = [
                 functional.scaled_dot_product_attention(
                     head_q[:, :, start : start + query_chunk_size, :].float(),
@@ -506,8 +512,28 @@ def _scaled_dot_product_attention_query_chunked(
                     :, :, query_start : query_start + query_chunk_size, :
                 ].float()
                 scores = torch.matmul(query, head_k.transpose(-2, -1)) * scale
-                probabilities = torch.softmax(scores + key_bias, dim=-1)
-                output = torch.matmul(probabilities, head_v)
+                probabilities = torch.softmax(
+                    scores + key_bias if use_collapsed_attention else scores,
+                    dim=-1,
+                )
+                if value_reduction_chunk is None:
+                    output = torch.matmul(probabilities, head_v)
+                else:
+                    partials = [
+                        torch.matmul(
+                            probabilities[..., start : start + value_reduction_chunk],
+                            head_v[..., start : start + value_reduction_chunk, :],
+                        )
+                        for start in range(0, head_k.shape[-2], value_reduction_chunk)
+                    ]
+                    while len(partials) > 1:
+                        partials = [
+                            partials[index] + partials[index + 1]
+                            if index + 1 < len(partials)
+                            else partials[index]
+                            for index in range(0, len(partials), 2)
+                        ]
+                    output = partials[0]
                 query_chunks.append(output.to(dtype=output_dtype))
         head_groups.append(torch.cat(query_chunks, dim=2)[:, :real_head_count, :, :])
     return torch.cat(head_groups, dim=1).permute(0, 2, 1, 3)
@@ -695,6 +721,7 @@ def adapt_official_flow_for_onnx(
     rms_norm_eps: float | None = None,
     attention_output_chunk: int = 256,
     attention_output_reduction_chunk: int = 256,
+    context0_attention_value_chunk: int | None = None,
 ) -> AdapterMetadata:
     """Apply three one-way, export-only adaptations to an official model instance.
 
@@ -762,6 +789,12 @@ def adapt_official_flow_for_onnx(
                 f"{existing.attention_output_reduction_chunk}, not "
                 f"{attention_output_reduction_chunk}"
             )
+        if existing.context0_attention_value_chunk != context0_attention_value_chunk:
+            raise ValueError(
+                "Flow model was already adapted with context attention value chunk "
+                f"{existing.context0_attention_value_chunk}, not "
+                f"{context0_attention_value_chunk}"
+            )
         return existing
 
     if not isinstance(attention_query_chunk, int) or attention_query_chunk <= 0:
@@ -787,6 +820,15 @@ def adapt_official_flow_for_onnx(
         or attention_output_reduction_chunk <= 0
     ):
         raise ValueError("attention_output_reduction_chunk must be a positive integer")
+    if context0_attention_value_chunk is not None and (
+        not isinstance(context0_attention_value_chunk, int)
+        or context0_attention_value_chunk <= 0
+    ):
+        raise ValueError("context0_attention_value_chunk must be None or positive")
+    if collapsed_unconditional_context and context0_attention_value_chunk is not None:
+        raise ValueError(
+            "context0 attention value chunk cannot be combined with collapsed context"
+        )
 
     if not hasattr(model, "pos_pe") or not hasattr(model, "pos_embedder"):
         raise AttributeError("Official flow model lacks pos_pe/pos_embedder")
@@ -839,6 +881,49 @@ def adapt_official_flow_for_onnx(
             head_padding_size=attention_head_padding,
         )
     )
+    if context0_attention_value_chunk is not None:
+        if not hasattr(model, "context_refiner") or not model.context_refiner:
+            raise AttributeError(
+                "Official flow model lacks the first context refiner attention layer"
+            )
+
+        def context_attention_forward(
+            self: Any,
+            x: Any,
+            context: Any = None,
+            rope_emb: Any = None,
+        ) -> Any:
+            if context is not None or self._type != "self":
+                raise ValueError(
+                    "Context attention value-chunk candidate requires self-attention"
+                )
+            batch, length, channels = x.shape
+            qkv = self.qkv(x).reshape(
+                batch, length, 3, self.num_heads, self.head_dim
+            )
+            q, k, v = qkv.unbind(2)
+            if self.use_rope:
+                q = _apply_rotary_emb_real(q, rope_emb)
+                k = _apply_rotary_emb_real(k, rope_emb)
+            if self.qk_rms_norm:
+                q = self.q_norm(q)
+                k = self.k_norm(k)
+            attended = _scaled_dot_product_attention_query_chunked(
+                q=q,
+                k=k,
+                v=v,
+                query_chunk_size=attention_query_chunk,
+                collapsed_unconditional_context=False,
+                head_chunk_size=attention_head_chunk,
+                head_padding_size=attention_head_padding,
+                value_reduction_chunk=context0_attention_value_chunk,
+            )
+            return self.out(attended.reshape(batch, length, channels))
+
+        context_attention = model.context_refiner[0].attn
+        context_attention.forward = types.MethodType(
+            context_attention_forward, context_attention
+        )
     if collapsed_unconditional_context:
         model.forward = types.MethodType(_collapsed_unconditional_forward, model)
 
@@ -1023,6 +1108,7 @@ def adapt_official_flow_for_onnx(
         static_position_shape=tuple(int(value) for value in fixed_position.shape),
         static_position_dtype=str(fixed_position.dtype).removeprefix("torch."),
         static_position_sha256=_tensor_sha256(fixed_position),
+        context0_attention_value_chunk=context0_attention_value_chunk,
     )
     model._triposplat_onnx_adapter_metadata = metadata
     return metadata

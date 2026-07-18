@@ -76,6 +76,14 @@ def probe_sources(
     if probe_set == "context0":
         context_vector = [1, 4, 1024]
         attention_rows = [1, 16, 4, 4101]
+        candidate_tree_root = "/flow_model/context_refiner.0/attn/Add_17_output_0"
+        # The canonical graph has one probability×V MatMul. The K=256 candidate
+        # has 17 value partials per query chunk; Add_17 is the first chunk's
+        # final balanced-tree output. Select it only when its inferred attention
+        # shape proves this is the candidate, not an unrelated Add node.
+        weighted_value_source = "/flow_model/context_refiner.0/attn/MatMul_1_output_0"
+        if shapes.get(candidate_tree_root) == [1, 16, 256, 64]:
+            weighted_value_source = candidate_tree_root
         return [
             (
                 "context0_block_input",
@@ -144,7 +152,7 @@ def probe_sources(
             ),
             (
                 "context0_weighted_value_rows",
-                "/flow_model/context_refiner.0/attn/MatMul_1_output_0",
+                weighted_value_source,
                 [1, 16, 4, 64],
             ),
             (

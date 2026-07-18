@@ -13,6 +13,7 @@
     "pretypecheck": "pnpm --filter @ai3d/gaussian-scene build && pnpm --filter @ai3d/triposplat-webgpu build",
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "deploy": "node scripts/deploy.mjs",
     "typecheck": "tsc -b",
     "test": "node --test tests/*.test.ts",
     "test:package-consumer": "node scripts/test_packed_vite_consumer.mjs",

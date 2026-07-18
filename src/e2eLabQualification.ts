@@ -25,7 +25,7 @@ export interface GaussianSceneStructuralQualification {
     sphericalHarmonics: NumericArraySummary
   }
   metadata: {
-    fourStepSchedule: boolean
+    supportedFlowSchedule: boolean
     preparedInputRecorded: boolean
     degreeZeroSphericalHarmonics: boolean
     linearScales: boolean
@@ -126,7 +126,8 @@ export function qualifyGaussianSceneStructure(
     sphericalHarmonics: summarizeArray(scene.sphericalHarmonics, expectedCount * 3),
   }
   const metadata = {
-    fourStepSchedule: scene.metadata.generationSettings.steps === 4,
+    supportedFlowSchedule: scene.metadata.generationSettings.steps === 4
+      || scene.metadata.generationSettings.steps === 20,
     preparedInputRecorded: scene.metadata.generationSettings.inputIsPrepared === true,
     degreeZeroSphericalHarmonics:
       scene.metadata.sphericalHarmonicsSemantics === 'degree-0-rgb',

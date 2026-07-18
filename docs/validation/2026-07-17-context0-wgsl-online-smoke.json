@@ -1,0 +1,39 @@
+{
+  "date": "2026-07-17",
+  "candidate": "wgsl-online-softmax-v1",
+  "deploymentCandidate": false,
+  "canonicalProductionChanged": false,
+  "artifacts": {
+    "canonicalGraphSha256": "558a52ea5eb0a714ba76e1b273159fe16e473424fe39abb6cc0c4ad65b4bc54d",
+    "preGraphSha256": "6d7aae6ba473b5bef53cce29ac0e68f73b1414a7786812966cce5c441b3d15ac",
+    "postGraphSha256": "6ad5486db43219794fa3e0ca36c78afe05ab6ea8fa0a356da228acd9072219f9",
+    "preNodeCount": 3004,
+    "postNodeCount": 47140,
+    "preOutputs": ["triposplat_context0_q", "triposplat_context0_k", "triposplat_context0_v"],
+    "postInputs": ["triposplat_context0_attended", "camera", "feature1", "feature2", "latent", "t"]
+  },
+  "environment": {
+    "browser": "HeadlessChrome/150.0.0.0",
+    "webgpu": true,
+    "runtime": "onnxruntime-web 1.27.0",
+    "build": "pnpm build; immutable dist served with read-only local model and fixture routes; HMR disabled"
+  },
+  "smoke": {
+    "canonicalWebGpuSessionLoadMs": 15097.3,
+    "candidateWebGpuSessionLoadMs": 14688.1,
+    "executionProvider": "webgpu",
+    "invocation": 8,
+    "pass": "unconditional",
+    "inferenceMs": 12340.9,
+    "finite": true,
+    "webgpuContextLost": false,
+    "latentVsOfficial": {"max": 3.3437576293945312, "mean": 0.2212045964688092, "rmse": 0.29881529985606875, "cosine": 0.965725333500029},
+    "cameraVsOfficial": {"max": 1.462714672088623, "mean": 0.8750993952155113, "rmse": 0.9930022280996594, "cosine": 0.6965235721946559}
+  },
+  "decision": {
+    "status": "no-go-early",
+    "reason": "Invocation 8 is materially worse than the canonical strict-parity defect, so no invocation-7, trajectory, runtime-pair, or E2E gate is justified.",
+    "runtimeFinding": "ORT GPU-buffer tensor capacity was 26214400 bytes for a 16797696-byte logical Q tensor. The public tensor contract supplies dimensions but no byte offset or strides; the generic WGSL kernel therefore cannot establish the linear GPU layout required for a numerically valid custom reduction.",
+    "nextCandidate": "ORT-compatible tiled/pairwise lowering or a minimal ORT tensor-layout/custom-op extension that exposes a packed Q/K/V view; do not deploy the WGSL online candidate."
+  }
+}

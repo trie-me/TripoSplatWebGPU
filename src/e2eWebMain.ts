@@ -36,6 +36,7 @@ interface RunStatusSnapshot {
 }
 
 interface SelectedImage {
+  selectionId: number
   blob: Blob
   sourceBlob: Blob
   name: string
@@ -168,10 +169,12 @@ let lastRunMarkerPhase = ''
 let pageIsHiding = false
 const interruptedRunNotice = consumeInterruptedRunMarker()
 let selectedImage: SelectedImage | undefined
+let imageSelectionSequence = 0
 let imagePreparer: ImagePreparer | undefined
+let activePreparationController: AbortController | undefined
 let model: TripoSplatWebGPU | undefined
 let loadedModelBase: string | undefined
-let controller: AbortController | undefined
+let activeRunController: AbortController | undefined
 let busy = false
 let activePlyUrl: string | undefined
 let downloadablePly: Blob | undefined
@@ -533,6 +536,7 @@ function buildBenchmarkReport(
   scene: { count: number; metadata: { generationSettings: Readonly<Record<string, unknown>>; seed: number; modelRevision: string } },
   base: string,
   cachedBytesAfter: number,
+  image: SelectedImage,
 ): string {
   const totalDuration = performance.now() - telemetry.startedAtMs
   const settings = scene.metadata.generationSettings
@@ -553,7 +557,7 @@ function buildBenchmarkReport(
     `Model base: ${base}`,
     '',
     'Input and output',
-    `Image: ${selectedImage?.name ?? 'unknown'} · ${selectedImage ? `${selectedImage.width}×${selectedImage.height}` : 'unknown size'} · ${selectedImage?.hasAlpha ? 'alpha' : 'opaque'}`,
+    `Image: ${image.name} · ${image.width}×${image.height} · ${image.hasAlpha ? 'alpha' : 'opaque'}`,
     `Gaussians: ${scene.count.toLocaleString()}`,
     `Steps: ${String(settings.steps ?? DEFAULT_STEPS)} · seed ${scene.metadata.seed} · precision ${String(settings.precision ?? 'unknown')}`,
     '',
@@ -966,18 +970,71 @@ async function inspectImage(blob: Blob): Promise<Pick<SelectedImage, 'width' | '
   }
 }
 
-async function setSelectedImage(
+function isCurrentImageSelection(selectionId: number): boolean {
+  return selectionId === imageSelectionSequence
+}
+
+function cancelImagePreparation(reason = 'Image processing cancelled.'): void {
+  const preparationController = activePreparationController
+  if (!preparationController) return
+  preparationController.abort(new DOMException(reason, 'AbortError'))
+  if (activePreparationController === preparationController) activePreparationController = undefined
+  imagePreparer?.cancel()
+  setBusy(false)
+}
+
+function clearSelectedImage(): void {
+  const previousPreviewUrl = selectedImage?.previewUrl
+  selectedImage = undefined
+  imagePreviewImage.removeAttribute('src')
+  imagePreview.hidden = true
+  imageSummary.dataset.state = 'empty'
+  imageSummary.textContent = 'No image selected yet.'
+  imagePreparationStatus.dataset.state = 'idle'
+  imagePreparationStatus.textContent = 'Choose an image to enable local processing.'
+  if (previousPreviewUrl) URL.revokeObjectURL(previousPreviewUrl)
+  updateGenerateButton()
+  updatePrepareImageButton()
+}
+
+function beginImageSelection(): number {
+  if (activeRunController) {
+    throw new Error('Wait for the current generation to finish before choosing another image.')
+  }
+  imageSelectionSequence += 1
+  cancelImagePreparation('A newer image was selected.')
+  clearSelectedImage()
+  return imageSelectionSequence
+}
+
+async function selectImage(
   blob: Blob,
   name: string,
   options: ImageSelectionOptions = {},
 ): Promise<void> {
+  const selectionId = beginImageSelection()
+  try {
+    await commitSelectedImage(selectionId, blob, name, options)
+  } catch (error) {
+    if (isCurrentImageSelection(selectionId)) throw error
+  }
+}
+
+async function commitSelectedImage(
+  selectionId: number,
+  blob: Blob,
+  name: string,
+  options: ImageSelectionOptions = {},
+): Promise<boolean> {
   if (!blob.type.startsWith('image/')) throw new Error('Choose an image file, or a URL that returns an image content type.')
   const previewBlob = options.previewBlob ?? blob
   const image = await inspectImage(previewBlob)
+  if (!isCurrentImageSelection(selectionId)) return false
   const previousPreviewUrl = selectedImage?.previewUrl
   const previewUrl = URL.createObjectURL(previewBlob)
   const inputIsPrepared = options.inputIsPrepared ?? false
   selectedImage = {
+    selectionId,
     blob,
     sourceBlob: options.sourceBlob ?? blob,
     name,
@@ -1001,10 +1058,16 @@ async function setSelectedImage(
       : 'Opaque image detected — starting local background removal now.'
   updateGenerateButton()
   updatePrepareImageButton()
-  if (!inputIsPrepared && !image.hasAlpha) void prepareSelectedImage()
+  if (!inputIsPrepared && !image.hasAlpha) void prepareSelectedImage(selectionId)
+  return true
 }
 
-function reportImagePreparationProgress(progress: PreparationProgress): void {
+function reportImagePreparationProgress(
+  progress: PreparationProgress,
+  selectionId: number,
+  preparationController: AbortController,
+): void {
+  if (!isCurrentImageSelection(selectionId) || activePreparationController !== preparationController) return
   const percentage = progress.fraction === undefined ? undefined : Math.round(progress.fraction * 100)
   imagePreparationStatus.dataset.state = 'working'
   imagePreparationStatus.textContent = percentage === undefined
@@ -1013,13 +1076,12 @@ function reportImagePreparationProgress(progress: PreparationProgress): void {
   setRunStatus('IMAGE PROCESSING', progress.message, percentage)
 }
 
-async function prepareSelectedImage(): Promise<void> {
+async function prepareSelectedImage(selectionId = selectedImage?.selectionId): Promise<void> {
   const image = selectedImage
-  if (!image || busy) return
+  if (!image || selectionId === undefined || selectionId !== image.selectionId || !isCurrentImageSelection(selectionId) || busy) return
   hideDiagnostics()
-  controller?.abort()
   const preparationController = new AbortController()
-  controller = preparationController
+  activePreparationController = preparationController
   setBusy(true)
   setRunStatus('IMAGE PROCESSING', 'Starting local background removal and TripoSplat framing…', 0)
   imagePreparationStatus.dataset.state = 'working'
@@ -1032,10 +1094,14 @@ async function prepareSelectedImage(): Promise<void> {
       profile: 'triposplat',
       strictCompatibility: true,
       signal: preparationController.signal,
-      onProgress: reportImagePreparationProgress,
+      onProgress: (progress) => reportImagePreparationProgress(progress, selectionId, preparationController),
     })
-    if (preparationController.signal.aborted) return
-    await setSelectedImage(prepared.modelInput, image.name, {
+    if (
+      preparationController.signal.aborted
+      || !isCurrentImageSelection(selectionId)
+      || activePreparationController !== preparationController
+    ) return
+    const committed = await commitSelectedImage(selectionId, prepared.modelInput, image.name, {
       sourceBlob: image.sourceBlob,
       previewBlob: prepared.transparentCutout,
       inputIsPrepared: true,
@@ -1043,17 +1109,24 @@ async function prepareSelectedImage(): Promise<void> {
         ? `Prepared locally with note: ${prepared.warnings[0]}`
         : 'Prepared locally — background removed and subject framed for TripoSplat.',
     })
+    if (!committed || activePreparationController !== preparationController) return
     setRunStatus('IMAGE READY', 'Local image processing finished. The model-ready image is selected.', 100)
   } catch (error) {
-    if (preparationController.signal.aborted) return
+    if (
+      preparationController.signal.aborted
+      || !isCurrentImageSelection(selectionId)
+      || activePreparationController !== preparationController
+    ) return
     const friendly = friendlyError(error)
     imagePreparationStatus.dataset.state = 'error'
     imagePreparationStatus.textContent = `Image processing failed: ${friendly.message}`
     setRunStatus('IMAGE PROCESSING FAILED', friendly.message)
     showDiagnostics(friendly.message, friendly.details)
   } finally {
-    if (controller === preparationController) controller = undefined
-    setBusy(false)
+    if (activePreparationController === preparationController) {
+      activePreparationController = undefined
+      setBusy(false)
+    }
   }
 }
 
@@ -1083,18 +1156,23 @@ async function loadImageFromUrl(): Promise<void> {
   } catch {
     throw new Error('Enter a complete image URL, including https://.')
   }
+  const selectionId = beginImageSelection()
   clearImageUrlError()
   setRunStatus('IMAGE URL', 'Downloading the image directly into this browser…')
   let response: Response
   try {
     response = await fetch(url, { mode: 'cors' })
   } catch {
+    if (!isCurrentImageSelection(selectionId)) return
     throw new Error('The browser could not read this image. The host may be blocking cross-origin access (CORS), or the URL may be unavailable. Use an image host that sends Access-Control-Allow-Origin for this site, or choose a local file instead.')
   }
+  if (!isCurrentImageSelection(selectionId)) return
   if (!response.ok) throw new Error(`The image host returned HTTP ${response.status} ${response.statusText}. Check the URL or choose another image host.`)
   const blob = await response.blob()
+  if (!isCurrentImageSelection(selectionId)) return
   const name = decodeURIComponent(url.pathname.split('/').pop() || 'remote-image')
-  await setSelectedImage(blob, name)
+  const committed = await commitSelectedImage(selectionId, blob, name)
+  if (!committed) return
   clearImageUrlError()
   setRunStatus('IMAGE READY', 'Image loaded locally. The default browser model package is ready when you are.')
 }
@@ -1330,15 +1408,17 @@ function reportGenerationProgress(progress: GenerationProgress): void {
 }
 
 async function run(): Promise<void> {
-  if (!selectedImage) throw new Error('Choose an image before generating.')
+  const image = selectedImage
+  if (!image) throw new Error('Choose an image before generating.')
+  if (busy || activeRunController) throw new Error('Wait for the current image operation to finish before generating.')
   if (!compatibility?.supported) throw new Error('This browser does not meet the current WebGPU requirements.')
   if (platformRunBlocker) throw new Error(platformRunBlocker)
   requireQualifiedStorage(storageQualification)
   const base = normalizedModelBase(modelBaseInput.value)
   hideDiagnostics()
   armCompletionChime()
-  controller?.abort()
-  controller = new AbortController()
+  const runController = new AbortController()
+  activeRunController = runController
   startRunTelemetry(storageQualification?.cachedBytes ?? 0)
   setBusy(true)
   startActiveRunMarker()
@@ -1353,18 +1433,18 @@ async function run(): Promise<void> {
   try {
     updateActiveRunMarker('storage and manifest preflight')
     await requestPersistentStorage()
-    const verified = await verifyModelServer(base, controller.signal)
+    const verified = await verifyModelServer(base, runController.signal)
     applyVerifiedModel(verified)
     requireQualifiedStorage(verified.qualification)
-    const activeModel = await prepareModel(base, controller.signal)
+    const activeModel = await prepareModel(base, runController.signal)
     setRunStatus('PREPROCESSING', 'Preparing the image locally…')
     updateActiveRunMarker('generation: preprocessing')
-    const scene = await activeModel.generate(selectedImage.blob, {
+    const scene = await activeModel.generate(image.blob, {
       steps: DEFAULT_STEPS,
       gaussianCount: 262_144,
       seed: 42,
-      inputIsPrepared: selectedImage.inputIsPrepared,
-      signal: controller.signal,
+      inputIsPrepared: image.inputIsPrepared,
+      signal: runController.signal,
       onProgress: reportGenerationProgress,
     })
     try {
@@ -1380,7 +1460,7 @@ async function run(): Promise<void> {
       const qualificationAfter = await refreshCacheStatus()
       if (telemetry) {
         const cachedBytesAfter = qualificationAfter.cachedBytes ?? telemetry.cachedBytesBefore
-        showBenchmarkReport(buildBenchmarkReport(telemetry, scene, base, cachedBytesAfter), performance.now() - telemetry.startedAtMs)
+        showBenchmarkReport(buildBenchmarkReport(telemetry, scene, base, cachedBytesAfter, image), performance.now() - telemetry.startedAtMs)
       }
       completed = true
     } finally {
@@ -1391,7 +1471,7 @@ async function run(): Promise<void> {
     setRunStatus('NEEDS ATTENTION', friendly.message)
     showDiagnostics(friendly.message, friendly.details)
   } finally {
-    if (controller?.signal.aborted) setRunStatus('CANCELLED', 'Cancelled. The next run will start a clean worker.')
+    if (runController.signal.aborted) setRunStatus('CANCELLED', 'Cancelled. The next run will start a clean worker.')
     if (!completed) {
       completionChimeArmed = false
       finishRunTelemetry()
@@ -1401,8 +1481,10 @@ async function run(): Promise<void> {
       )
     }
     clearActiveRunMarker()
-    controller = undefined
-    setBusy(false)
+    if (activeRunController === runController) {
+      activeRunController = undefined
+      setBusy(false)
+    }
   }
 }
 
@@ -1450,7 +1532,7 @@ fileInput.addEventListener('change', () => {
   const file = fileInput.files?.[0]
   fileInput.value = ''
   if (!file) return
-  void setSelectedImage(file, file.name).catch((error) => {
+  void selectImage(file, file.name).catch((error) => {
     const friendly = friendlyError(error)
     setRunStatus('IMAGE ERROR', friendly.message)
     showDiagnostics(friendly.message, friendly.details)
@@ -1482,7 +1564,7 @@ for (const eventName of ['dragleave', 'drop']) {
 sourcePanel.addEventListener('drop', (event) => {
   const file = event.dataTransfer?.files[0]
   if (!file) return
-  void setSelectedImage(file, file.name).catch((error) => {
+  void selectImage(file, file.name).catch((error) => {
     const friendly = friendlyError(error)
     setRunStatus('IMAGE ERROR', friendly.message)
     showDiagnostics(friendly.message, friendly.details)
@@ -1506,8 +1588,8 @@ generateButton.addEventListener('click', () => { void run().catch((error) => {
   showDiagnostics(friendly.message, friendly.details)
 }) })
 cancelButton.addEventListener('click', () => {
-  imagePreparer?.cancel()
-  controller?.abort(new DOMException('Cancelled by user.', 'AbortError'))
+  cancelImagePreparation('Cancelled by user.')
+  activeRunController?.abort(new DOMException('Cancelled by user.', 'AbortError'))
 })
 clearCacheButton.addEventListener('click', () => {
   void clearModelCache().then(async () => {
@@ -1539,9 +1621,9 @@ void checkPlatform().catch((error) => {
 })
 window.addEventListener('pagehide', () => {
   pageIsHiding = true
-  imagePreparer?.cancel()
+  cancelImagePreparation('The page is closing.')
   imagePreparer?.dispose()
-  controller?.abort()
+  activeRunController?.abort()
   void completionChimeContext?.close()
   void model?.dispose()
   previewRoot.unmount()

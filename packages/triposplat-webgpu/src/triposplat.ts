@@ -4,6 +4,7 @@ import { checkCompatibility } from './compatibility.js'
 import {
   CancelledError,
   GraphCapabilityError,
+  isWebGpuDeviceLostError,
   ManifestError,
   ModelDownloadError,
   TripoSplatError,
@@ -329,11 +330,12 @@ export class TripoSplatWebGPU {
       }
       return scene
     } catch (error) {
-      // Aborting an in-flight ORT WebGPU run terminates the worker because ORT
-      // cannot cancel a submitted GPU graph safely. Recreate the runtime lazily
-      // on the next load/generate call so cancellation is recoverable without a
-      // page reload or a new TripoSplatWebGPU instance.
-      if (error instanceof CancelledError) await this.resetAfterCancellation()
+      // Cancellation and WebGPU device loss both poison the in-flight ORT
+      // worker. Recreate the entire runtime lazily on the next call; sessions
+      // and buffers from a lost device must never be reused.
+      if (error instanceof CancelledError || isWebGpuDeviceLostError(error)) {
+        await this.resetRuntime()
+      }
       throw error
     }
   }
@@ -466,7 +468,7 @@ export class TripoSplatWebGPU {
     else if (this.options.logLevel === 'info') console.info('[TripoSplatWebGPU]', status.message)
   }
 
-  private async resetAfterCancellation(): Promise<void> {
+  private async resetRuntime(): Promise<void> {
     const runtime = this.runtimeValue
     const artifactManager = this.artifactManagerValue
     this.runtimeValue = undefined

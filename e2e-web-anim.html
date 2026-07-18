@@ -28,13 +28,16 @@
       <span class="capability" id="platform-badge"><i></i><span>Checking platform</span></span>
     </nav>
     <main id="main-content" class="app-shell web-app">
-      <header class="web-hero">
-        <div class="eyebrow"><span>Image to 3D Model. </span></div>
-        <h1><em>Offline. Local. Portable.</em></h1>
-        <p>Your browser uses WebGPU to run the full TripoSplat model locally.<br />
+      <header class="web-hero web-hero--animated">
+        <div class="web-hero-copy">
+          <div class="eyebrow"><span>Image to 3D Model. </span></div>
+          <h1><em>Offline. Local. Portable.</em></h1>
+          <p>Your browser uses WebGPU to run the full TripoSplat model locally.<br />
 The ≈6.5 GB model package downloads once, verifies, and stays in offline browser storage.<br />
 After that, it is ready to run again without another model download.</p>
-        <div class="hero-actions"><a class="github-link" href="#source-heading">Try it out <span aria-hidden="true">↘</span></a><a class="hero-text-link" href="#browser-experiment">Why this matters <span aria-hidden="true">↓</span></a></div>
+          <div class="hero-actions"><a class="github-link" href="#source-heading">Try it out <span aria-hidden="true">↘</span></a><a class="hero-text-link" href="#browser-experiment">Why this matters <span aria-hidden="true">↓</span></a></div>
+        </div>
+        <aside id="hero-animation-root" aria-hidden="true"></aside>
       </header>
       <section class="compatibility-panel" aria-labelledby="compatibility-heading">
         <div><span class="section-index">SYSTEM CHECK</span><h2 id="compatibility-heading">Preparing your browser</h2></div>
@@ -106,5 +109,6 @@ After that, it is ready to run again without another model download.</p>
     </main>
     <footer><span>TRIPOSPLAT WEBGPU · ENGINEERING PREVIEW</span><a href="#source-heading">Try it out</a><a href="https://github.com/yosun/TripoSplatWebGPU" target="_blank" rel="noreferrer">View source on GitHub <span aria-hidden="true">↗</span></a><a href="https://www.producthunt.com/products/triposplat-webgpu?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-triposplat-webgpu" target="_blank" rel="noopener noreferrer"><img alt="TripoSplat WebGPU - Image to 3D Model: Offline. Local. Portable. | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1198682&amp;theme=light&amp;t=1784320164461"></a><a href="/e2e-lab.html">Qualification lab</a><a href="/sharp-lab.html">Legacy SHARP lab</a></footer>
     <script type="module" src="/src/e2eWebMain.ts"></script>
+    <script type="module" src="/src/e2eWebHeroAnimation.tsx"></script>
   </body>
 </html>

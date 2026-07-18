@@ -1,9 +1,14 @@
 # TripoSplat WebGPU
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/yosun/TripoSplatWebGPU/main/public/corgi.ceo_image_header.social.jpg" alt="TripoSplat WebGPU — browser-local image to 3D" />
+</p>
+
 [![Package validation](https://github.com/yosun/TripoSplatWebGPU/actions/workflows/package-validation.yml/badge.svg)](https://github.com/yosun/TripoSplatWebGPU/actions/workflows/package-validation.yml)
 ![WebGPU required](https://img.shields.io/badge/WebGPU-required-4285F4)
 [![Hugging Face Space](https://img.shields.io/badge/🤗%20Hugging%20Face-browser--local%20demo-FFD21E)](https://huggingface.co/spaces/Yosun/TripoSplat-WebGPU-Demo)
 [![Vercel demo](https://img.shields.io/badge/Vercel-browser--local%20demo-c6ff4a?logo=vercel&logoColor=black)](https://triposplat-webgpu.vercel.app/e2e-web)
+<a href="https://www.producthunt.com/products/triposplat-webgpu?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-triposplat-webgpu" target="_blank" rel="noopener noreferrer"><img alt="TripoSplat WebGPU - Image to 3D Model: Offline. Local. Portable. | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1198682&amp;theme=light&amp;t=1784320164461"></a>
 
 A working, browser-local WebGPU engineering preview of [TripoSplat](https://github.com/VAST-AI-Research/TripoSplat), built from the [ml-sharp-web](https://github.com/bring-shrubbery/ml-sharp-web) application chassis. It selects an image, runs the model pipeline locally in the browser, displays the resulting Gaussian scene, and exports binary PLY or `.splat` files. The official TripoSplat PyTorch implementation remains the numerical source of truth; the existing SHARP path remains a known-good browser inference baseline.
 
@@ -22,7 +27,7 @@ These are animated WebP browser recordings from the tester results:
   <tr>
     <td><strong>Cartoon House</strong><br><img src="https://raw.githubusercontent.com/yosun/TripoSplatWebGPU/main/public/_testers/results/Cartoon%20House/cartoon.house.webp" alt="Cartoon House" width="320"></td>
     <td><strong>Women's Shoes</strong><br><img src="https://raw.githubusercontent.com/yosun/TripoSplatWebGPU/main/public/_testers/results/Womens%20Shoes%20Red/womens.shoes.webp" alt="Women's Shoes" width="320"></td>
-    <td><strong>Corgi CEO Basket</strong><br><img src="https://raw.githubusercontent.com/yosun/TripoSplatWebGPU/main/public/_testers/results/corgi.ceo-basket/corgi.ceo-basket.webp" alt="Corgi CEO Basket" width="320"></td>
+    <td><strong>[Corgi.ceo](https://corgi.ceo) Basket</strong><br><img src="https://raw.githubusercontent.com/yosun/TripoSplatWebGPU/main/public/_testers/results/corgi.ceo-basket/corgi.ceo-basket.webp" alt="Corgi CEO Basket" width="320"></td>
   </tr>
 </table>
 
@@ -96,7 +101,7 @@ Upload the Space card after the bundle because `dist/` does not contain `README.
 
 - **The packaged browser-local pipeline works end to end at the structural level.** The recorded prepared-image run completed DINOv3, Flux VAE, eight DiT calls, eight octree levels, Gaussian decoding, PLY/`.splat` export, and viewer loading. It produced 262,144 finite Gaussians. This is a structural/export/viewer pass, not a whole-scene numerical or rendered-pixel parity claim.
 - **The isolated fp32 stages are strongly validated on the recorded fixture.** DINOv3, Flux VAE, one DiT invocation, the complete eight-level octree trajectory, and the raw Gaussian decoder pass their declared browser gates. The four-step CFG/Euler loop completes and passes its qualification envelope, while still failing the separately recorded stricter latent diagnostic.
-- **The canonical 20-step path completes but is not parity-qualified.** All 40 WebGPU DiT calls finish without fallback, but accumulated latent drift fails both qualification and strict final-state gates (`0.0487093` maximum absolute error; `0.9999996593` cosine similarity).
+- **The canonical 20-step path completes but is not parity-qualified.** All 40 WebGPU DiT calls finish without fallback, but accumulated latent drift fails both qualification and strict final-state gates (`0.0487093` maximum absolute error; `0.9999996593` cosine similarity). A community RTX 3090-class warm-OPFS report completed in 7m 52s, with 5m 2s in DiT inference and only 7ms in DiT readback; the same user found 20-step output visibly acceptable while four steps was too low quality. See the [field analysis and optimization direction](docs/rtx3090-20-step-performance.md).
 - **The remaining DiT discrepancy has been localized.** The first material conditional/unconditional split occurs in `context_refiner.0` attention at probability×V accumulation on the all-zero unconditional branch. ONNX Runtime CPU reproduces the initiating discrepancy, so it is not WebGPU-only; WebGPU introduces additional separation. The official sampler, CFG/Euler arithmetic, standalone octree, and standalone Gaussian decoder are not implicated as the initiating cause.
 - **The best bounded reduction candidate was a no-go.** K=256 probability×V chunking improved complete 20-step max/mean/RMSE error by approximately 14.6%/31.5%/30.3%, but remained outside tolerance, ran slower, and lacked a controlled paired visual comparison. The canonical graph and manifest therefore remain unchanged.
 - **The evidence is deliberately narrow.** Headline measurements come from Chrome 150 with ONNX Runtime WebGPU 1.27 on one Apple M3 Max with 128 GB unified memory. Edge, 16 GB Apple Silicon, other Apple and Windows GPUs, Safari, Firefox, repeated-generation behavior, and peak WebGPU/unified-memory use remain unqualified.
@@ -199,6 +204,8 @@ Read the [browser architecture audit](docs/architecture-audit.md) for graph cont
 - [Model hosting, CORS, and caching](docs/model-hosting.md)
 - [Framework integration examples](docs/framework-integration.md)
 - [Compatibility and measured benchmarks](docs/compatibility-and-benchmarks.md)
+- [RTX 3090-class 20-step performance and optimization direction](docs/rtx3090-20-step-performance.md)
+- [GPT-5.6 Sol performance continuation prompt](docs/gpt-5.6-sol-performance-continuation-prompt.md)
 - [Gaussian conventions and export](docs/gaussian-conventions.md)
 - [Privacy and security](docs/privacy-and-security.md)
 - [Troubleshooting](docs/troubleshooting.md)

@@ -135,6 +135,17 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--context0-attention-value-chunk",
+        type=int,
+        default=None,
+        metavar="KEYS",
+        help=(
+            "Opt into a balanced tree of bounded probability-times-V MatMuls only "
+            "for the selected first context refiner attention layer(s); omit to "
+            "preserve canonical SDPA lowering."
+        ),
+    )
+    parser.add_argument(
         "--collapsed-unconditional-context",
         action=argparse.BooleanOptionalAction,
         default=False,
@@ -245,6 +256,18 @@ def parse_args() -> argparse.Namespace:
         parser.error("--external-data-threshold must be non-negative")
     if args.attention_query_chunk <= 0:
         parser.error("--attention-query-chunk must be positive")
+    if (
+        args.context0_attention_value_chunk is not None
+        and args.context0_attention_value_chunk <= 0
+    ):
+        parser.error("--context0-attention-value-chunk must be positive")
+    if (
+        args.collapsed_unconditional_context
+        and args.context0_attention_value_chunk is not None
+    ):
+        parser.error(
+            "--context0-attention-value-chunk cannot be combined with collapsed context"
+        )
     if args.attention_head_chunk <= 0:
         parser.error("--attention-head-chunk must be positive")
     if args.attention_head_padding < 0:
@@ -831,6 +854,7 @@ def export_graph(args: argparse.Namespace) -> list[Path]:
         rms_norm_eps=args.rms_norm_eps,
         attention_output_chunk=args.attention_output_chunk,
         attention_output_reduction_chunk=args.attention_output_reduction_chunk,
+        context0_attention_value_chunk=args.context0_attention_value_chunk,
     )
     graph = make_browser_flow_step(torch, flow_model, args.internal_precision)
 
@@ -903,9 +927,20 @@ def export_graph(args: argparse.Namespace) -> list[Path]:
                 "unconditional-only collapsed context with explicit float32 "
                 "query-chunked self-attention and log(4101) retained-key multiplicity"
                 if adapter.collapsed_unconditional_context
-                else "canonical functional SDPA in independent head/query chunks"
+                else (
+                    "the first context refiner attention layer uses explicit "
+                    "probability-times-V partial trees; all other attention uses "
+                    "canonical functional SDPA chunks"
+                    if adapter.context0_attention_value_chunk is not None
+                    else "canonical functional SDPA in independent head/query chunks"
+                )
             ),
             "triposplat.attention_query_chunk": str(adapter.attention_query_chunk),
+            "triposplat.context0_attention_value_chunk": (
+                "disabled"
+                if adapter.context0_attention_value_chunk is None
+                else str(adapter.context0_attention_value_chunk)
+            ),
             "triposplat.collapsed_unconditional_context": str(
                 adapter.collapsed_unconditional_context
             ).lower(),
@@ -934,7 +969,15 @@ def export_graph(args: argparse.Namespace) -> list[Path]:
                 "retained context key; all other attention uses functional SDPA; "
                 "output cast to model dtype"
                 if adapter.collapsed_unconditional_context
-                else "functional SDPA for every attention path; output cast to model dtype"
+                else (
+                    "the first context refiner attention layer uses explicit float32 "
+                    "scores and softmax, "
+                    f"{adapter.context0_attention_value_chunk}-key value partials, "
+                    "and balanced Add trees; all other attention uses functional "
+                    "SDPA; output cast to model dtype"
+                    if adapter.context0_attention_value_chunk is not None
+                    else "functional SDPA for every attention path; output cast to model dtype"
+                )
             ),
             "triposplat.rope_primitive_gate": json.dumps(primitive_gate, sort_keys=True),
             "triposplat.static_position_shape": json.dumps(adapter.static_position_shape),

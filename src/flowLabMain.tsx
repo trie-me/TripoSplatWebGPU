@@ -11,6 +11,9 @@ import { OrtWorkerClient, type OrtWorkerStatus } from './runtime/OrtWorkerClient
 import { createTensorPayload, type TensorPayload } from './runtime/tensors'
 
 const DEFAULT_MODEL = '/models/triposplat/dit_step_webgpu_fp32.onnx'
+const CONTEXT0_WGSL_PRE_MODEL = '/models/triposplat/dit_step_webgpu_fp32_context0_wgsl.pre.onnx'
+const CONTEXT0_WGSL_POST_MODEL = '/models/triposplat/dit_step_webgpu_fp32_context0_wgsl.post.onnx'
+type AttentionCandidate = 'canonical' | 'context0-wgsl'
 const DEFAULT_FIXTURE = '/fixtures/generated/flow4-fp32-compute'
 const SESSION_ID = 'triposplat/flow-parity'
 const FP16_TOLERANCE = { absolute: 0.2, relative: 0.05, minimumCosineSimilarity: 0.9995 }
@@ -38,9 +41,14 @@ interface OutputGate extends TensorComparison {
   passed: boolean
 }
 
+interface CandidateReliability {
+  webGpuContextLost: boolean
+}
+
 interface FlowLabResult {
   passed: boolean
   strictPassed: boolean
+  candidate: AttentionCandidate
   executionProvider: string
   modelLoadMs: number
   modelTransferBytes?: number
@@ -53,6 +61,7 @@ interface FlowLabResult {
   settings: { steps: number; guidanceScale: 3; shift: 3; arithmetic: 'float16' | 'float32' }
   tolerance: { absolute: number; relative: number; minimumCosineSimilarity: number }
   strictTolerance: { absolute: number; relative: number; minimumCosineSimilarity: number }
+  reliability: CandidateReliability
   environment: {
     userAgent: string
     crossOriginIsolated: boolean
@@ -71,6 +80,7 @@ interface FlowTrajectoryInvocation {
 
 interface FlowTrajectoryResult {
   passed: boolean
+  candidate: AttentionCandidate
   executionProvider: string
   modelLoadMs: number
   modelTransferBytes?: number
@@ -86,6 +96,7 @@ interface FlowTrajectoryResult {
     latent: OutputGate
     camera: OutputGate
   }>
+  reliability: CandidateReliability
   environment: FlowLabResult['environment']
 }
 
@@ -121,6 +132,19 @@ async function contentLength(url: string): Promise<number | undefined> {
   } catch {
     return undefined
   }
+}
+
+async function modelTransferSize(
+  modelUrl: string,
+  candidate: AttentionCandidate,
+): Promise<number | undefined> {
+  const urls = candidate === 'context0-wgsl'
+    ? [CONTEXT0_WGSL_PRE_MODEL, CONTEXT0_WGSL_POST_MODEL, `${modelUrl}.data`]
+    : [modelUrl, `${modelUrl}.data`]
+  const parts = await Promise.all(urls.map(contentLength))
+  return parts.every((value) => value !== undefined)
+    ? parts.reduce<number>((sum, value) => sum + (value ?? 0), 0)
+    : undefined
 }
 
 function payloadFloat32(name: string, payload: TensorPayload | undefined): Float32Array {
@@ -215,12 +239,47 @@ function gateOutput(
   }
 }
 
+function initialUrl(parameter: string, fallback: string): string {
+  return new URLSearchParams(window.location.search).get(parameter) ?? fallback
+}
+
+function attentionCandidate(): AttentionCandidate {
+  const value = initialUrl('attentionCandidate', 'canonical')
+  if (value === 'canonical' || value === 'context0-wgsl') return value
+  throw new Error(`Unknown attentionCandidate '${value}'. Use 'canonical' or 'context0-wgsl'.`)
+}
+
+async function loadFlowSession(
+  client: OrtWorkerClient,
+  sessionId: string,
+  modelUrl: string,
+  candidate: AttentionCandidate,
+) {
+  const sidecarUrl = `${modelUrl}.data`
+  const externalDataPath = new URL(modelUrl, document.baseURI).pathname.split('/').at(-1)
+  if (!externalDataPath) throw new Error(`Could not derive external-data path from ${modelUrl}.`)
+  const options = { allowWasmFallback: false, graphOptimizationLevel: 'disabled' as const }
+  const externalData = [{ path: `${decodeURIComponent(externalDataPath)}.data`, url: sidecarUrl }]
+  if (candidate === 'context0-wgsl') {
+    return client.loadContext0Split({
+      sessionId,
+      graphs: {
+        pre: { graphUrl: CONTEXT0_WGSL_PRE_MODEL, externalData },
+        post: { graphUrl: CONTEXT0_WGSL_POST_MODEL, externalData },
+      },
+      options,
+    })
+  }
+  return client.loadSession({ sessionId, manifest: { graphUrl: modelUrl, externalData }, options })
+}
+
 export function FlowLab() {
   const clientRef = useRef<OrtWorkerClient | null>(null)
   const autoRunStartedRef = useRef(false)
   const runRef = useRef<() => Promise<void>>(async () => undefined)
-  const [modelUrl, setModelUrl] = useState(DEFAULT_MODEL)
-  const [fixtureUrl, setFixtureUrl] = useState(DEFAULT_FIXTURE)
+  const [modelUrl, setModelUrl] = useState(() => initialUrl('model', DEFAULT_MODEL))
+  const [fixtureUrl, setFixtureUrl] = useState(() => initialUrl('fixture', DEFAULT_FIXTURE))
+  const [candidate] = useState<AttentionCandidate>(() => attentionCandidate())
   const [status, setStatus] = useState('Ready to validate the 4-step browser flow loop.')
   const [progress, setProgress] = useState('No DiT invocations yet.')
   const [busy, setBusy] = useState(false)
@@ -243,9 +302,13 @@ export function FlowLab() {
     delete window.__TRIPOSPLAT_FLOW4_RESULT__
     delete window.__TRIPOSPLAT_FLOW_RESULT__
     let client: OrtWorkerClient | undefined
+    let webGpuContextLost = false
     try {
       if (clientRef.current) await clientRef.current.dispose()
-      const onStatus = (event: OrtWorkerStatus) => setStatus(event.message)
+      const onStatus = (event: OrtWorkerStatus) => {
+        if (event.stage === 'webgpu-context-lost') webGpuContextLost = true
+        setStatus(event.message)
+      }
       client = new OrtWorkerClient({ onStatus })
       clientRef.current = client
       const { steps, arithmetic: predictionArithmetic } = await fixtureConfiguration(fixtureUrl)
@@ -278,24 +341,14 @@ export function FlowLab() {
         feature2: new Float32Array(feature2.length),
       }
 
-      const sidecarUrl = `${modelUrl}.data`
-      const externalDataPath = new URL(modelUrl, document.baseURI).pathname.split('/').at(-1)
-      if (!externalDataPath) throw new Error(`Could not derive external-data path from ${modelUrl}.`)
-      const transferParts = await Promise.all([contentLength(modelUrl), contentLength(sidecarUrl)])
-      const modelTransferBytes = transferParts.every((value) => value !== undefined)
-        ? transferParts.reduce<number>((sum, value) => sum + (value ?? 0), 0)
-        : undefined
-      const loaded = await client.loadSession({
-        sessionId: SESSION_ID,
-        manifest: {
-          graphUrl: modelUrl,
-          externalData: [{ path: `${decodeURIComponent(externalDataPath)}.data`, url: sidecarUrl }],
-        },
-        options: { allowWasmFallback: false, graphOptimizationLevel: 'disabled' },
-      })
+      const modelTransferBytes = await modelTransferSize(modelUrl, candidate)
+      const loaded = await loadFlowSession(client, SESSION_ID, modelUrl, candidate)
       if (loaded.executionProvider !== 'webgpu') {
         throw new Error(`Expected WebGPU, loaded ${loaded.executionProvider}.`)
       }
+      const runFlowInvocation = candidate === 'context0-wgsl'
+        ? client.runContext0Split.bind(client)
+        : client.runSession.bind(client)
 
       let invocations = 0
       let inferenceMs = 0
@@ -312,7 +365,7 @@ export function FlowLab() {
             `Flow step ${invocation.step}/${steps} · ${invocation.pass} `
             + `(DiT invocation ${invocations}/${expectedInvocations})…`,
           )
-          const response = await client!.runSession({
+          const response = await runFlowInvocation({
             sessionId: SESSION_ID,
             inputs: {
               latent: createTensorPayload(
@@ -376,6 +429,7 @@ export function FlowLab() {
       const next: FlowLabResult = {
         passed: invocations === expectedInvocations && outputs.latent.passed && outputs.camera.passed,
         strictPassed,
+        candidate,
         executionProvider: loaded.executionProvider,
         modelLoadMs: loaded.loadMs,
         modelTransferBytes,
@@ -388,6 +442,7 @@ export function FlowLab() {
         settings: { steps, guidanceScale: 3, shift: 3, arithmetic: predictionArithmetic },
         tolerance,
         strictTolerance,
+        reliability: { webGpuContextLost },
         environment: {
           userAgent: navigator.userAgent,
           crossOriginIsolated: self.crossOriginIsolated,
@@ -426,9 +481,15 @@ export function FlowLab() {
     setTrajectoryResult(null)
     delete window.__TRIPOSPLAT_FLOW_TRAJECTORY_RESULT__
     let client: OrtWorkerClient | undefined
+    let webGpuContextLost = false
     try {
       if (clientRef.current) await clientRef.current.dispose()
-      client = new OrtWorkerClient({ onStatus: (event) => setStatus(event.message) })
+      client = new OrtWorkerClient({
+        onStatus: (event) => {
+          if (event.stage === 'webgpu-context-lost') webGpuContextLost = true
+          setStatus(event.message)
+        },
+      })
       clientRef.current = client
       setStatus('Fetching the official per-invocation trajectory…')
       const configuration = await trajectoryConfiguration(fixtureUrl)
@@ -441,24 +502,14 @@ export function FlowLab() {
       ])
       const zeroFeature1 = new Float32Array(feature1.length)
       const zeroFeature2 = new Float32Array(feature2.length)
-      const sidecarUrl = `${modelUrl}.data`
-      const externalDataPath = new URL(modelUrl, document.baseURI).pathname.split('/').at(-1)
-      if (!externalDataPath) throw new Error(`Could not derive external-data path from ${modelUrl}.`)
-      const transferParts = await Promise.all([contentLength(modelUrl), contentLength(sidecarUrl)])
-      const modelTransferBytes = transferParts.every((value) => value !== undefined)
-        ? transferParts.reduce<number>((sum, value) => sum + (value ?? 0), 0)
-        : undefined
-      const loaded = await client.loadSession({
-        sessionId: `${SESSION_ID}/trajectory`,
-        manifest: {
-          graphUrl: modelUrl,
-          externalData: [{ path: `${decodeURIComponent(externalDataPath)}.data`, url: sidecarUrl }],
-        },
-        options: { allowWasmFallback: false, graphOptimizationLevel: 'disabled' },
-      })
+      const modelTransferBytes = await modelTransferSize(modelUrl, candidate)
+      const loaded = await loadFlowSession(client, `${SESSION_ID}/trajectory`, modelUrl, candidate)
       if (loaded.executionProvider !== 'webgpu') {
         throw new Error(`Expected WebGPU, loaded ${loaded.executionProvider}.`)
       }
+      const runTrajectoryInvocation = candidate === 'context0-wgsl'
+        ? client.runContext0Split.bind(client)
+        : client.runSession.bind(client)
       let inferenceMs = 0
       let readbackMs = 0
       const records: FlowTrajectoryResult['records'] = []
@@ -478,7 +529,7 @@ export function FlowLab() {
           fetchFloat32(path('pred_camera'), elementCount(SHAPES.camera)),
         ])
         const conditional = invocation.pass === 'conditional'
-        const response = await client.runSession({
+        const response = await runTrajectoryInvocation({
           sessionId: `${SESSION_ID}/trajectory`,
           inputs: {
             latent: createTensorPayload('float32', latent, SHAPES.latent),
@@ -518,6 +569,7 @@ export function FlowLab() {
       }
       const next: FlowTrajectoryResult = {
         passed: records.every((record) => record.latent.passed && record.camera.passed),
+        candidate,
         executionProvider: loaded.executionProvider,
         modelLoadMs: loaded.loadMs,
         ...(modelTransferBytes === undefined ? {} : { modelTransferBytes }),
@@ -527,6 +579,7 @@ export function FlowLab() {
         wallMs: performance.now() - started,
         tolerance,
         records,
+        reliability: { webGpuContextLost },
         environment: {
           userAgent: navigator.userAgent,
           crossOriginIsolated: self.crossOriginIsolated,
@@ -570,6 +623,7 @@ export function FlowLab() {
     <main>
       <h1>TripoSplat · WebGPU flow parity</h1>
       <p>Runs the TypeScript CFG/Euler loop using the official fixture's 4- or 20-step schedule.</p>
+      <p>Attention candidate: <strong>{candidate}</strong> (set <code>attentionCandidate=context0-wgsl</code> to opt in).</p>
       <label>ONNX graph <input value={modelUrl} onChange={(event) => setModelUrl(event.target.value)} /></label>
       <label>Fixture directory <input value={fixtureUrl} onChange={(event) => setFixtureUrl(event.target.value)} /></label>
       <button type="button" disabled={busy} onClick={() => void run()}>

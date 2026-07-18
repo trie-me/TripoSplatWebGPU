@@ -32,7 +32,7 @@ test('E2E scene qualification accepts the canonical finite array contract', () =
   assert.equal(result.arrays.rotations.expectedLength, 8)
   assert.equal(result.arrays.sphericalHarmonics.finite, true)
   assert.deepEqual(result.metadata, {
-    fourStepSchedule: true,
+    supportedFlowSchedule: true,
     preparedInputRecorded: true,
     degreeZeroSphericalHarmonics: true,
     linearScales: true,
@@ -55,7 +55,7 @@ test('E2E scene qualification rejects non-finite, missing, and stale metadata', 
   assert.equal(result.passed, false)
   assert.equal(result.arrays.positions.nonFiniteCount, 1)
   assert.equal(result.arrays.sphericalHarmonics.present, false)
-  assert.equal(result.metadata.fourStepSchedule, false)
+  assert.equal(result.metadata.supportedFlowSchedule, true)
   assert.equal(result.metadata.preparedInputRecorded, false)
 })
 

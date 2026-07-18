@@ -2,11 +2,21 @@
 
 import * as ort from 'onnxruntime-web/webgpu'
 
+import {
+  CONTEXT0_ATTENTION_BYTES,
+  CONTEXT0_ATTENTION_SHAPE,
+  createContext0AttentionExecutor,
+  type Context0AttentionExecutor,
+  type WebGpuBuffer,
+  type WebGpuDevice,
+} from './context0Attention'
 import { assertModelManifest } from '../runtime/modelManifest'
 import type { OnnxModelManifest } from '../runtime/modelManifest'
 import type {
   OrtConfigureRuntimeResult,
   OrtExecutionProvider,
+  OrtLoadContext0SplitRequest,
+  OrtLoadContext0SplitResult,
   OrtLoadSessionRequest,
   OrtLoadSessionResult,
   OrtRunSessionRequest,
@@ -45,7 +55,23 @@ interface SessionRecord {
   disposed: boolean
 }
 
+interface LoadedContext0Split {
+  pre: LoadedSession
+  post: LoadedSession
+  executor: Context0AttentionExecutor
+  metadata: Omit<OrtLoadContext0SplitResult, 'loadMs'>
+  loadMs: number
+}
+
+interface Context0SplitRecord {
+  fingerprint: string
+  loading: Promise<LoadedContext0Split>
+  runTail: Promise<void>
+  disposed: boolean
+}
+
 const sessions = new Map<string, SessionRecord>()
+const context0Splits = new Map<string, Context0SplitRecord>()
 let runtimeConfiguration: OrtConfigureRuntimeResult | undefined
 
 function serializeError(error: unknown): SerializedWorkerError {
@@ -211,10 +237,12 @@ function createSessionOptions(
   manifest: OnnxModelManifest,
   options: OrtSessionLoadOptions | undefined,
   provider: OrtExecutionProvider,
+  preferredOutputLocation: 'cpu' | 'gpu-buffer' = 'cpu',
+  device?: WebGpuDevice,
 ): ort.InferenceSession.SessionOptions {
   const common: ort.InferenceSession.SessionOptions = {
     graphOptimizationLevel: options?.graphOptimizationLevel ?? 'all',
-    preferredOutputLocation: 'cpu',
+    preferredOutputLocation,
     externalData: manifest.externalData?.map(({ path, url }) => ({ path, data: url })),
   }
 
@@ -232,6 +260,7 @@ function createSessionOptions(
 
   const webgpu: ort.InferenceSession.WebGpuExecutionProviderOption = {
     name: 'webgpu',
+    device,
     preferredLayout: options?.webgpu?.preferredLayout,
     forceCpuNodeNames: options?.webgpu?.forceCpuNodeNames,
     validationMode: options?.webgpu?.validationMode,
@@ -243,7 +272,12 @@ function createSessionOptions(
   return common
 }
 
-async function loadOrtSession(request: OrtLoadSessionRequest, requestId: string): Promise<LoadedSession> {
+async function loadOrtSession(
+  request: OrtLoadSessionRequest,
+  requestId: string,
+  preferredOutputLocation: 'cpu' | 'gpu-buffer' = 'cpu',
+  device?: WebGpuDevice,
+): Promise<LoadedSession> {
   ensureRuntimeConfigured(requestId)
   const { sessionId, manifest, options } = request
   const startedAt = performance.now()
@@ -267,7 +301,7 @@ async function loadOrtSession(request: OrtLoadSessionRequest, requestId: string)
     try {
       session = await ort.InferenceSession.create(
         manifest.graphUrl,
-        createSessionOptions(manifest, options, 'webgpu'),
+        createSessionOptions(manifest, options, 'webgpu', preferredOutputLocation, device),
       )
     } catch (webgpuError) {
       if (!options?.allowWasmFallback) {
@@ -355,6 +389,211 @@ async function loadSession(request: OrtLoadSessionRequest, requestId: string): P
   return { ...loaded.metadata, loadMs: loaded.loadMs }
 }
 
+let webGpuDevice: WebGpuDevice | undefined
+
+function isWebGpuDevice(value: unknown): value is WebGpuDevice {
+  return typeof value === 'object' && value !== null
+    && 'createBuffer' in value && 'createComputePipeline' in value && 'queue' in value
+}
+
+async function sharedWebGpuDevice(): Promise<WebGpuDevice> {
+  if (webGpuDevice) return webGpuDevice
+  const device = await ort.env.webgpu.device
+  if (!isWebGpuDevice(device)) {
+    throw new Error('ONNX Runtime did not expose its WebGPU device after pre-session initialization.')
+  }
+  webGpuDevice = device
+  void device.lost.then((info) => {
+    postStatus('webgpu-context-lost', `WebGPU device was lost: ${info.message || info.reason}.`)
+  })
+  return device
+}
+
+function context0SplitFingerprint(request: OrtLoadContext0SplitRequest): string {
+  return JSON.stringify({ graphs: request.graphs, options: request.options ?? {} })
+}
+
+async function loadContext0Split(
+  request: OrtLoadContext0SplitRequest,
+  requestId: string,
+): Promise<OrtLoadContext0SplitResult> {
+  assertSessionId(request.sessionId)
+  assertModelManifest(request.graphs.pre)
+  assertModelManifest(request.graphs.post)
+  if (sessions.has(request.sessionId)) {
+    throw new Error(`Session '${request.sessionId}' is already loaded as a regular ONNX session.`)
+  }
+  const fingerprint = context0SplitFingerprint(request)
+  const existing = context0Splits.get(request.sessionId)
+  if (existing) {
+    if (existing.fingerprint !== fingerprint) {
+      throw new Error(`Context0 split '${request.sessionId}' is already loaded with different graphs or options.`)
+    }
+    const loaded = await existing.loading
+    return { ...loaded.metadata, loadMs: loaded.loadMs }
+  }
+  const record: Context0SplitRecord = {
+    fingerprint,
+    loading: Promise.resolve(undefined as never),
+    runTail: Promise.resolve(),
+    disposed: false,
+  }
+  record.loading = (async () => {
+    const startedAt = performance.now()
+    const options = { ...request.options, allowWasmFallback: false }
+    const pre = await loadOrtSession(
+      { sessionId: `${request.sessionId}/pre`, manifest: request.graphs.pre, options },
+      requestId,
+      'gpu-buffer',
+    )
+    let device: WebGpuDevice
+    let post: LoadedSession
+    try {
+      device = await sharedWebGpuDevice()
+      post = await loadOrtSession(
+        { sessionId: `${request.sessionId}/post`, manifest: request.graphs.post, options },
+        requestId,
+        'cpu',
+      )
+    } catch (error) {
+      await pre.session.release()
+      throw error
+    }
+    if (pre.executionProvider !== 'webgpu' || post.executionProvider !== 'webgpu') {
+      await Promise.all([pre.session.release(), post.session.release()])
+      throw new Error('Context0 split requires WebGPU for both ONNX sessions.')
+    }
+    const metadata: Omit<OrtLoadContext0SplitResult, 'loadMs'> = {
+      sessionId: request.sessionId,
+      executionProvider: 'webgpu',
+      inputNames: Array.from(pre.session.inputNames),
+      outputNames: Array.from(post.session.outputNames),
+      preOutputNames: Array.from(pre.session.outputNames),
+      postInputNames: Array.from(post.session.inputNames),
+    }
+    return {
+      pre,
+      post,
+      executor: createContext0AttentionExecutor(device),
+      metadata,
+      loadMs: performance.now() - startedAt,
+    }
+  })().catch((error: unknown) => {
+    if (context0Splits.get(request.sessionId) === record) context0Splits.delete(request.sessionId)
+    throw error
+  })
+  context0Splits.set(request.sessionId, record)
+  const loaded = await record.loading
+  return { ...loaded.metadata, loadMs: loaded.loadMs }
+}
+
+function requireGpuBuffer(tensor: ort.Tensor, name: string): WebGpuBuffer {
+  if (tensor.type !== 'float32' || tensor.location !== 'gpu-buffer') {
+    throw new Error(`Context0 split output '${name}' must be a float32 GPU buffer.`)
+  }
+  if (
+    tensor.dims.length !== CONTEXT0_ATTENTION_SHAPE.length
+    || tensor.dims.some((value, index) => value !== CONTEXT0_ATTENTION_SHAPE[index])
+  ) {
+    throw new Error(
+      `Context0 split output '${name}' has shape [${tensor.dims.join(', ')}]; `
+      + `expected [${CONTEXT0_ATTENTION_SHAPE.join(', ')}].`,
+    )
+  }
+  const buffer = tensor.gpuBuffer
+  if (!buffer || buffer.size < CONTEXT0_ATTENTION_BYTES) {
+    throw new Error(
+      `Context0 split output '${name}' has ${buffer?.size ?? 0} bytes; `
+      + `expected at least ${CONTEXT0_ATTENTION_BYTES}.`,
+    )
+  }
+  return buffer as unknown as WebGpuBuffer
+}
+
+async function runContext0Split(
+  request: OrtRunSessionRequest,
+  requestId: string,
+): Promise<OrtRunSessionResult> {
+  assertSessionId(request.sessionId)
+  assertTensorPayloadMap(request.inputs, 'request.inputs')
+  const record = context0Splits.get(request.sessionId)
+  if (!record || record.disposed) throw new Error(`Context0 split '${request.sessionId}' is not loaded.`)
+  postStatus('inference-queued', `Queued Context0 split inference for '${request.sessionId}'.`, requestId, request.sessionId, 'webgpu')
+  return enqueueSessionRun(record, async () => {
+    if (record.disposed) throw new Error(`Context0 split '${request.sessionId}' was disposed before inference started.`)
+    const loaded = await record.loading
+    const requestedOutputs = request.outputs === undefined ? undefined : Array.from(request.outputs)
+    if (requestedOutputs?.some((name) => !loaded.post.session.outputNames.includes(name))) {
+      throw new Error(`Context0 post session '${request.sessionId}' does not provide every requested output.`)
+    }
+    const preFeeds: Record<string, ort.Tensor> = {}
+    for (const [name, payload] of Object.entries(request.inputs)) preFeeds[name] = toOrtTensor(payload)
+    const totalStartedAt = performance.now()
+    let inferenceMs = 0
+    let preOutputs: ort.InferenceSession.ReturnType | undefined
+    let attended: ort.Tensor | undefined
+    try {
+      const preStartedAt = performance.now()
+      preOutputs = await loaded.pre.session.run(preFeeds, request.tag ? { tag: `${request.tag}/pre` } : {})
+      inferenceMs += performance.now() - preStartedAt
+      const q = preOutputs.triposplat_context0_q
+      const k = preOutputs.triposplat_context0_k
+      const v = preOutputs.triposplat_context0_v
+      if (!q || !k || !v) throw new Error('Context0 pre graph did not produce Q, K, and V GPU outputs.')
+      const output = loaded.executor.dispatch({
+        q: requireGpuBuffer(q, 'triposplat_context0_q'),
+        k: requireGpuBuffer(k, 'triposplat_context0_k'),
+        v: requireGpuBuffer(v, 'triposplat_context0_v'),
+      })
+      attended = ort.Tensor.fromGpuBuffer(output, {
+        dataType: 'float32',
+        dims: Array.from(CONTEXT0_ATTENTION_SHAPE),
+        dispose: () => output.destroy(),
+      })
+      const postFeeds: Record<string, ort.Tensor> = {}
+      for (const inputName of loaded.post.session.inputNames) {
+        if (inputName === 'triposplat_context0_attended') {
+          postFeeds[inputName] = attended
+          continue
+        }
+        const value = preOutputs[inputName] ?? preFeeds[inputName]
+        if (!value) {
+          throw new Error(
+            `Context0 pre graph did not produce and caller did not provide post input '${inputName}'.`,
+          )
+        }
+        postFeeds[inputName] = value
+      }
+      const postStartedAt = performance.now()
+      const ortOutputs = requestedOutputs === undefined
+        ? await loaded.post.session.run(postFeeds, request.tag ? { tag: `${request.tag}/post` } : {})
+        : await loaded.post.session.run(postFeeds, requestedOutputs, request.tag ? { tag: `${request.tag}/post` } : {})
+      inferenceMs += performance.now() - postStartedAt
+      const readbackStartedAt = performance.now()
+      const outputEntries = await Promise.all(Object.entries(ortOutputs).map(async ([name, tensor]) => {
+        try {
+          return [name, await outputTensorPayload(name, tensor)] as const
+        } finally {
+          tensor.dispose()
+        }
+      }))
+      const readbackMs = performance.now() - readbackStartedAt
+      postStatus('inference-complete', `Context0 split inference for '${request.sessionId}' completed.`, requestId, request.sessionId, 'webgpu', 1)
+      return {
+        sessionId: request.sessionId,
+        outputs: Object.fromEntries(outputEntries) as TensorPayloadMap,
+        timings: { inferenceMs, readbackMs, totalMs: performance.now() - totalStartedAt },
+      }
+    } finally {
+      for (const tensor of Object.values(preFeeds)) tensor.dispose()
+      attended?.dispose()
+      if (preOutputs) {
+        for (const tensor of Object.values(preOutputs)) tensor.dispose()
+      }
+    }
+  })
+}
+
 function toOrtTensor(payload: TensorPayload): ort.Tensor {
   switch (payload.type) {
     case 'float32':
@@ -410,7 +649,7 @@ async function outputTensorPayload(name: string, tensor: ort.Tensor): Promise<Te
   }
 }
 
-function enqueueSessionRun<T>(record: SessionRecord, task: () => Promise<T>): Promise<T> {
+function enqueueSessionRun<T>(record: { runTail: Promise<void> }, task: () => Promise<T>): Promise<T> {
   const result = record.runTail.then(task)
   record.runTail = result.then(() => undefined, () => undefined)
   return result
@@ -521,8 +760,27 @@ async function runSession(request: OrtRunSessionRequest, requestId: string): Pro
   })
 }
 
+async function disposeContext0Split(sessionId: string, requestId?: string): Promise<boolean> {
+  const record = context0Splits.get(sessionId)
+  if (!record) return false
+  record.disposed = true
+  context0Splits.delete(sessionId)
+  postStatus('session-disposing', `Disposing Context0 split '${sessionId}'.`, requestId, sessionId)
+  await record.runTail
+  let loaded: LoadedContext0Split | undefined
+  try {
+    loaded = await record.loading
+  } catch {
+    // A failed split load owns no releasable pair of sessions.
+  }
+  if (loaded) await Promise.all([loaded.pre.session.release(), loaded.post.session.release()])
+  postStatus('session-disposed', `Disposed Context0 split '${sessionId}'.`, requestId, sessionId, undefined, 1)
+  return true
+}
+
 async function disposeSession(sessionId: string, requestId?: string): Promise<boolean> {
   assertSessionId(sessionId)
+  if (context0Splits.has(sessionId)) return disposeContext0Split(sessionId, requestId)
   const record = sessions.get(sessionId)
   if (!record) {
     return false
@@ -546,7 +804,7 @@ async function disposeSession(sessionId: string, requestId?: string): Promise<bo
 }
 
 async function disposeAll(requestId: string): Promise<string[]> {
-  const sessionIds = Array.from(sessions.keys())
+  const sessionIds = [...sessions.keys(), ...context0Splits.keys()]
   postStatus('worker-disposing', `Disposing ${sessionIds.length} ONNX session(s).`, requestId)
   await Promise.all(sessionIds.map((sessionId) => disposeSession(sessionId, requestId)))
   postStatus('worker-disposed', 'All ONNX sessions are disposed.', requestId, undefined, undefined, 1)
@@ -566,8 +824,18 @@ async function dispatch(request: OrtWorkerRequest): Promise<void> {
         postSuccess(request.type, request.requestId, result)
         return
       }
+      case 'load-context0-split': {
+        const result = await loadContext0Split(request.payload, request.requestId)
+        postSuccess(request.type, request.requestId, result)
+        return
+      }
       case 'run-session': {
         const result = await runSession(request.payload, request.requestId)
+        postSuccess(request.type, request.requestId, result, tensorPayloadTransferables(result.outputs))
+        return
+      }
+      case 'run-context0-split': {
+        const result = await runContext0Split(request.payload, request.requestId)
         postSuccess(request.type, request.requestId, result, tensorPayloadTransferables(result.outputs))
         return
       }

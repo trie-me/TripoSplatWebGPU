@@ -34,6 +34,28 @@ export interface OrtLoadSessionRequest {
   options?: OrtSessionLoadOptions
 }
 
+/** Two opt-in graphs around context_refiner.0 weighted-value attention. */
+export interface OrtContext0SplitManifest {
+  pre: OnnxModelManifest
+  post: OnnxModelManifest
+}
+
+export interface OrtLoadContext0SplitRequest {
+  sessionId: string
+  graphs: OrtContext0SplitManifest
+  options?: OrtSessionLoadOptions
+}
+
+export interface OrtLoadContext0SplitResult {
+  sessionId: string
+  executionProvider: 'webgpu'
+  inputNames: string[]
+  outputNames: string[]
+  loadMs: number
+  preOutputNames: string[]
+  postInputNames: string[]
+}
+
 export interface OrtRunSessionRequest {
   sessionId: string
   inputs: TensorPayloadMap
@@ -99,7 +121,9 @@ export interface OrtDisposeAllResult {
 export interface OrtWorkerRequestPayloadMap {
   'configure-runtime': OrtRuntimeConfiguration
   'load-session': OrtLoadSessionRequest
+  'load-context0-split': OrtLoadContext0SplitRequest
   'run-session': OrtRunSessionRequest
+  'run-context0-split': OrtRunSessionRequest
   'dispose-session': { sessionId: string }
   'dispose-all': Record<string, never>
 }
@@ -107,7 +131,9 @@ export interface OrtWorkerRequestPayloadMap {
 export interface OrtWorkerResultMap {
   'configure-runtime': OrtConfigureRuntimeResult
   'load-session': OrtLoadSessionResult
+  'load-context0-split': OrtLoadContext0SplitResult
   'run-session': OrtRunSessionResult
+  'run-context0-split': OrtRunSessionResult
   'dispose-session': OrtDisposeSessionResult
   'dispose-all': OrtDisposeAllResult
 }
@@ -160,6 +186,7 @@ export type OrtWorkerStage =
   | 'session-disposed'
   | 'worker-disposing'
   | 'worker-disposed'
+  | 'webgpu-context-lost'
 
 export interface OrtWorkerStatus {
   type: 'status'
@@ -292,6 +319,16 @@ export class OrtWorkerClient {
     })
   }
 
+  async loadContext0Split(request: OrtLoadContext0SplitRequest): Promise<OrtLoadContext0SplitResult> {
+    assertSessionId(request.sessionId)
+    const graphs: OrtContext0SplitManifest = {
+      pre: resolveModelManifest(copyModelManifest(request.graphs.pre), this.baseUrl),
+      post: resolveModelManifest(copyModelManifest(request.graphs.post), this.baseUrl),
+    }
+    await this.ready
+    return this.sendRequest('load-context0-split', { sessionId: request.sessionId, graphs, options: request.options })
+  }
+
   async runSession(
     request: OrtRunSessionRequest,
     options: OrtRunClientOptions = {},
@@ -311,6 +348,17 @@ export class OrtWorkerClient {
     await this.ready
     const transfer = options.transferInputs === false ? [] : tensorPayloadTransferables(request.inputs)
     return this.sendRequest('run-session', request, transfer)
+  }
+
+  async runContext0Split(
+    request: OrtRunSessionRequest,
+    options: OrtRunClientOptions = {},
+  ): Promise<OrtRunSessionResult> {
+    assertSessionId(request.sessionId)
+    assertTensorPayloadMap(request.inputs, 'request.inputs')
+    await this.ready
+    const transfer = options.transferInputs === false ? [] : tensorPayloadTransferables(request.inputs)
+    return this.sendRequest('run-context0-split', request, transfer)
   }
 
   async disposeSession(sessionId: string): Promise<OrtDisposeSessionResult> {

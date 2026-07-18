@@ -1,4 +1,10 @@
-import { CancelledError, GraphLoadError, InferenceError, TripoSplatError } from './errors.js'
+import {
+  CancelledError,
+  GraphLoadError,
+  InferenceError,
+  isWebGpuDeviceLostError,
+  TripoSplatError,
+} from './errors.js'
 import type { ResolvedGraphManifestEntry } from './manifest.js'
 import { assertTensorMap, tensorTransferables, type TensorMap } from './tensors.js'
 import type { ExecutionProvider } from './types.js'
@@ -448,9 +454,14 @@ class WorkerRuntime implements TripoSplatRuntime {
       return result.result
     } catch (cause) {
       if (cause instanceof CancelledError) throw cause
+      const diagnostics = {
+        sessionId: request.sessionId,
+        tag: options.tag,
+        ...(isWebGpuDeviceLostError(cause) ? { reason: 'webgpu-device-lost' } : {}),
+      }
       throw new InferenceError(`ONNX inference failed for '${request.sessionId}'.`, {
         cause,
-        diagnostics: { sessionId: request.sessionId, tag: options.tag },
+        diagnostics,
       })
     }
   }

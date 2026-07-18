@@ -1,6 +1,6 @@
 # Twenty-step quality and parity investigation
 
-**Status:** diagnostic conclusion, 2026-07-16. No experimental graph described here is deployed.
+**Status:** diagnostic conclusion and performance direction updated 2026-07-18. No experimental graph described here is deployed.
 
 ## Executive conclusion
 
@@ -20,6 +20,12 @@ The official shifted schedule, `1000 * timestep`, CFG expression, float32 roundi
 
 Primary evidence: [`flow20 browser benchmark`](benchmarks/2026-07-15-flow20-fp32-webgpu.json) and [`invocation 7/8 block probes`](validation/2026-07-15-dit-flow4-invocations07-08-block-probes.json).
 
+## Visual quality and performance consequence
+
+A community RTX 3090-class report adds an important product observation: the 20-step output was visibly acceptable, while four steps produced inadequate quality. This does not conflict with the four-step qualification pass or the 20-step parity failure. Four-step parity measures agreement with the official four-step trajectory, not whether four large Euler updates are sufficient for the desired geometry. Twenty smaller updates apply conditioning and CFG repeatedly and can produce a perceptually better scene even while small per-call ONNX reduction differences accumulate relative to the official 20-step state. The octree can then amplify either useful latent refinement or numerical drift into discrete topology changes.
+
+The quality path must therefore remain 20 steps while performance work targets the cost of each DiT call. The warm-cache report measured 301.9 seconds of DiT inference, about 64% of a 472.2-second run, while all DiT readback totaled only 7 milliseconds. The next bounded work is dispatch/kernel profiling, per-session load timing, opt-in retained sessions, a graph-capture A/B, and only then a mixed FP16/FP32 DiT. Details: [`RTX 3090-class 20-step performance`](rtx3090-20-step-performance.md).
+
 ## Experiments and outcomes
 
 | Experiment | Invocation-40 max latent error | Outcome |
@@ -32,6 +38,19 @@ Primary evidence: [`flow20 browser benchmark`](benchmarks/2026-07-15-flow20-fp32
 | Sixteen representatives plus `4101/16` bias | `0.00092727` | No further benefit; temporary change reverted |
 
 The one-representative ONNX graph closely matched its adapted PyTorch specialization (`5.97e-5` max latent error), but that specialization differed from untouched official PyTorch by `9.29e-4`. The problem is therefore the changed floating-point reduction order, not an ONNX transcription failure in that candidate. Its 1.633 GB sidecar was byte-identical to the canonical sidecar, proving a future specialized graph need not duplicate weights.
+
+## K=256 probability×V candidate findings
+
+A bounded candidate replaced only `context_refiner.0` probability×V accumulation with seventeen 256-key MatMuls and a balanced Add tree. It preserved scores, softmax, weights, sampler, CFG, guidance, and tolerances. The candidate established several important findings:
+
+- Probability×V is the actionable numerical boundary. Against untouched official fp32 PyTorch, candidate weighted-value RMSE was `1.6715e-7` for invocation 7 and `4.5358e-5` for invocation 8. Invocation 8 post-projection RMSE remained `6.0785e-5`, so downstream amplification was still material.
+- Isolated invocation changes were mixed. Invocation 7 latent maximum error regressed from `4.3750e-5` to `4.4525e-5`, while invocation 8 improved from `7.6425e-4` to `7.5686e-4`.
+- The complete 20-step trajectory improved materially: final latent max `0.0487093` → `0.0416024`, mean `0.000351717` → `0.000240853`, and RMSE `0.000812052` → `0.000566224`. Despite the 14.6–31.5% reductions, it still failed the existing trajectory tolerance.
+- Runtime cost was unacceptable for production: teacher-forced execution was about 6.96% slower, and the candidate full-flow run was about 20.84% slower than the historical canonical run. No reliable browser peak-GPU-memory API was available.
+- The candidate completed Gaussian decode with 262,144 finite Gaussians, valid PLY and `.splat` exports, and a ready viewer. Two clean canonical E2E attempts reset before export, so no controlled fixed-camera or geometry comparison exists and visual improvement is not claimed.
+- Extending the tree to both context-refiner layers was rejected because invocation 7 and invocation 8 mean/RMSE regressed. The two-layer option was removed rather than retained as an unqualified surface.
+
+**Decision:** no-go. Keep the canonical graph and manifest. The result is evidence that reduction order can improve the full autoregressive trajectory, but this implementation is too slow, remains outside tolerance, and lacks paired visual qualification. Detailed evidence: [`context0 K=256 candidate`](context0-value-reduction-candidate.md) and [`machine-readable result`](validation/2026-07-17-context0-k256-candidate.json).
 
 ## Decisions and next direction
 

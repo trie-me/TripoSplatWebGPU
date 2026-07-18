@@ -1,0 +1,41 @@
+{
+  "completed": true,
+  "passed": null,
+  "component": "public_runner_community_field_report",
+  "qualification_scope": "self-reported-warm-cache-performance-only",
+  "numerical_parity_claimed": false,
+  "provenance": {
+    "kind": "community-self-report",
+    "received_utc": "2026-07-18",
+    "hardware_claim": "NVIDIA RTX 3090",
+    "browser_exposed_adapter": "nvidia ampere",
+    "limitations": ["Exact GPU SKU was not independently verified.", "No official-reference output, profiler trace, driver version, peak VRAM, or ONNX Runtime version was supplied."]
+  },
+  "source": {
+    "model_revision": "a78fa12d06dbf1381ca548bfac32bb68cb8c451d",
+    "model_base": "https://huggingface.co/Yosun/TripoSplat-WebGPU/resolve/main/triposplat-webgpu/0.1.0-fp32.20260715/",
+    "precision": "fp32"
+  },
+  "configuration": { "cache": "opfs", "steps": 20, "seed": 42, "gaussian_count": 262144 },
+  "environment": {
+    "operating_system": "Linux x86_64",
+    "browser": "Chrome 148.0.0.0",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+    "adapter": "nvidia ampere",
+    "logical_cpu_cores": 12,
+    "device_memory_hint_gib": 32
+  },
+  "timings_ms": {
+    "total": 472200,
+    "pipeline_wall": { "source": 5, "model": 59230, "conditioning": 69300, "sampling": 305000, "decode": 35950, "preview": 2730 },
+    "neural_inference": { "dino": 3010, "vae": 1010, "dit_40_calls": 301900, "dit_readback": 7, "octree_8_calls": 3020, "gaussian_decoder": 5120 },
+    "through_gaussian_inference": 410200
+  },
+  "storage": { "cached_bytes_before_gib": 6.02, "cached_bytes_after_gib": 6.02, "downloaded_and_verified_this_run_bytes": 0 },
+  "output": { "input": "red-fresh-shiny-apple-png-0.png", "input_size": [1024, 1024], "input_has_alpha": true, "gaussians": 262144 },
+  "observations": [
+    "DiT inference was approximately 64% of end-to-end wall time and averaged approximately 7.55 seconds per invocation.",
+    "Sampling wall exceeded DiT inference by approximately 3.1 seconds; DiT readback totaled 7 milliseconds.",
+    "This evidence is useful for prioritizing profiling but is not a controlled qualification result."
+  ]
+}

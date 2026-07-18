@@ -468,6 +468,20 @@ def validate(args: argparse.Namespace) -> dict[str, Any]:
             f"{graph_attention_query_chunk}"
         )
     attention_query_chunk = graph_attention_query_chunk
+    context0_value_chunk_raw = graph_metadata.get(
+        "triposplat.context0_attention_value_chunk", "disabled"
+    )
+    if context0_value_chunk_raw == "disabled":
+        context0_attention_value_chunk = None
+    else:
+        try:
+            context0_attention_value_chunk = int(context0_value_chunk_raw)
+        except ValueError as exc:
+            raise ValueError(
+                "Graph context0 attention value chunk metadata is not an integer"
+            ) from exc
+        if context0_attention_value_chunk <= 0:
+            raise ValueError("Graph context0 attention value chunk must be positive")
     collapsed_unconditional_context_value = graph_metadata.get(
         "triposplat.collapsed_unconditional_context", "false"
     )
@@ -680,6 +694,7 @@ def validate(args: argparse.Namespace) -> dict[str, Any]:
         rms_norm_eps=rms_norm_eps,
         attention_output_chunk=attention_output_chunk,
         attention_output_reduction_chunk=attention_output_reduction_chunk,
+        context0_attention_value_chunk=context0_attention_value_chunk,
     )
     adapted_graph = make_browser_flow_step(torch, flow_model, precision)
     synchronize_torch(torch, device)
@@ -782,6 +797,9 @@ def validate(args: argparse.Namespace) -> dict[str, Any]:
             "metadata": {
                 "real_rope_modules": adapter_metadata.real_rope_modules,
                 "attention_query_chunk": adapter_metadata.attention_query_chunk,
+                "context0_attention_value_chunk": (
+                    adapter_metadata.context0_attention_value_chunk
+                ),
                 "collapsed_unconditional_context": (
                     adapter_metadata.collapsed_unconditional_context
                 ),

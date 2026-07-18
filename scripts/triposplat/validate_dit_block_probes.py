@@ -170,6 +170,20 @@ def adapter_configuration(metadata: Mapping[str, str]) -> dict[str, Any]:
         rms_norm_eps = float(rms_value)
         if rms_norm_eps <= 0:
             raise ValueError("Graph RMS epsilon must be positive or disabled")
+    value_chunk = metadata.get(
+        "triposplat.context0_attention_value_chunk", "disabled"
+    )
+    if value_chunk == "disabled":
+        context0_attention_value_chunk = None
+    else:
+        try:
+            context0_attention_value_chunk = int(value_chunk)
+        except ValueError as exc:
+            raise ValueError(
+                "Graph context0 value chunk must be positive or disabled"
+            ) from exc
+        if context0_attention_value_chunk <= 0:
+            raise ValueError("Graph context0 value chunk must be positive or disabled")
     return {
         "precision": precision,
         "attention_query_chunk": int_metadata(
@@ -192,6 +206,7 @@ def adapter_configuration(metadata: Mapping[str, str]) -> dict[str, Any]:
         "attention_output_reduction_chunk": int_metadata(
             metadata, "triposplat.attention_output_reduction_chunk"
         ),
+        "context0_attention_value_chunk": context0_attention_value_chunk,
     }
 
 
@@ -535,6 +550,7 @@ def validate(args: argparse.Namespace) -> dict[str, Any]:
         rms_norm_eps=config["rms_norm_eps"],
         attention_output_chunk=config["attention_output_chunk"],
         attention_output_reduction_chunk=config["attention_output_reduction_chunk"],
+        context0_attention_value_chunk=config["context0_attention_value_chunk"],
     )
     adapted_graph = make_browser_flow_step(torch, model, config["precision"])
     adapted_values: dict[int, dict[str, Any]] = {}
