@@ -6,9 +6,7 @@ The target is desktop Chrome and Edge on Apple Silicon Macs with at least 16 GB 
 
 The only recorded browser environment is Chrome 150 on an Apple M3 Max Mac with 128 GB unified memory. No Microsoft Edge configuration, 16 GB Apple Silicon, Safari, Firefox, integrated Intel GPU, or discrete Windows GPU qualification has been completed.
 
-Until the complete pipeline and package are available, compatibility should be described as experimental even on the measured machine.
-
-An additional Mac-local quality path is qualified separately on an Apple M3 Max. It still requires browser WebGPU for DINO, VAE, octree, and Gaussian decoding, but runs the complete flow sampler through official fp32 PyTorch/MPS over authenticated loopback.
+Until the complete pipeline and package are available, compatibility should be described as experimental even on the measured machine. The separately maintained `TripoSplatMac` application is the native Apple Silicon reference and is not part of this browser compatibility matrix.
 
 ## What a compatibility check can know
 
@@ -28,24 +26,6 @@ A structured compatibility report should therefore include:
 It must not convert JavaScript heap size or `maxBufferSize` into a claim about available GPU memory.
 
 ## Measured results
-
-### Twenty-step native Mac MPS flow
-
-| Metric | Value |
-| --- | ---: |
-| Hardware | Apple M3 Max |
-| Backend | Untouched official PyTorch/MPS fp32 |
-| Model load | 2,248.3 ms |
-| Sampling inference, 40 DiT calls | 347,092.6 ms |
-| Request wall | 347,422.2 ms |
-| Request / response | 23,621,140 / 524,308 bytes |
-| Latent maximum absolute error | 0 |
-| Camera maximum absolute error | 0 |
-| Output hashes | Bit-exact fixture matches |
-| Qualification envelope | **Passed** |
-| Strict diagnostic | **Passed** |
-
-This is the promoted Mac 20-step path. On the same recorded M3 Max class, its 347,092.6 ms sampling time is 48.7% lower than the historical 676,669.1 ms conservative WebGPU record and 52.6% lower than the rejected 731,902.9 ms `all` optimizer run. The service/client path is exact on the fixed fixture. Evidence: [`Mac MPS validation`](validation/2026-07-18-flow20-mac-mps-service.json).
 
 Environment shared by all browser measurements:
 

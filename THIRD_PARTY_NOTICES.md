@@ -31,7 +31,8 @@ SHARP model weights are limited to research purposes under Apple's model agreeme
 ### ml-sharp-web chassis
 
 - repository: [bring-shrubbery/ml-sharp-web](https://github.com/bring-shrubbery/ml-sharp-web);
-- pinned chassis snapshot: `01ff783f782a0eab1eb0dbb533d51695dc526df6`;
+- pinned chassis snapshot: [`01ff783f782a0eab1eb0dbb533d51695dc526df6`](https://github.com/bring-shrubbery/ml-sharp-web/commit/01ff783f782a0eab1eb0dbb533d51695dc526df6);
+- prior integration history: [yosun/TripoSplatWebGPU](https://github.com/yosun/TripoSplatWebGPU);
 - detected root license at that snapshot: none.
 
 The absence of a detected license is not permission to redistribute. Before public release, obtain clarification from the copyright holder or replace inherited implementation with independently written, properly licensed modules while preserving only non-copyrightable interfaces and behavior as appropriate.

@@ -162,12 +162,12 @@ test('persistent prefetch memoizes verified blobs for prepareGraph within one ma
   assert.equal(hashReads, 1)
 })
 
-test('persistent prefetch can omit the WebGPU DiT artifact for the Mac MPS path', async () => {
+test('persistent prefetch can select a subset of graph artifacts', async () => {
   const artifact = bytes('selected graph')
   const downloads = []
   const manager = new ModelArtifactManager({
     backend: 'cache-api',
-    namespace: 'triposplat/1/mac-mps/fp32',
+    namespace: 'triposplat/1/selected-graphs/fp32',
     storage: new MemoryModelArtifactStorage(),
     fetch: async (url) => {
       downloads.push(String(url))
@@ -182,7 +182,7 @@ test('persistent prefetch can omit the WebGPU DiT artifact for the Mac MPS path'
   await manager.prefetchManifest({
     name: 'triposplat-webgpu',
     version: '1',
-    modelRevision: 'mac-mps',
+    modelRevision: 'selected-graphs',
     precision: 'fp32',
     graphs: { dino: graph('dino'), dit: graph('dit') },
   }, undefined, ['dino'])

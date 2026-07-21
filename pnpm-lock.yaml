@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  reconstruction-image-prep@0.1.0: bf7997ccdf787e1e9c575624dfdbf2b1f2fe8cae03a9292c0289c147454127d4
+
 importers:
 
   .:
@@ -37,7 +40,7 @@ importers:
         version: 19.2.7(react@19.2.7)
       reconstruction-image-prep:
         specifier: github:yosun/ai-image-prep#af80ef43f101ebdf6c7da3933b3be47662dd0169
-        version: https://codeload.github.com/yosun/ai-image-prep/tar.gz/af80ef43f101ebdf6c7da3933b3be47662dd0169
+        version: https://codeload.github.com/yosun/ai-image-prep/tar.gz/af80ef43f101ebdf6c7da3933b3be47662dd0169(patch_hash=bf7997ccdf787e1e9c575624dfdbf2b1f2fe8cae03a9292c0289c147454127d4)
       three:
         specifier: ^0.183.1
         version: 0.183.2
@@ -3229,7 +3232,7 @@ snapshots:
 
   react@19.2.7: {}
 
-  reconstruction-image-prep@https://codeload.github.com/yosun/ai-image-prep/tar.gz/af80ef43f101ebdf6c7da3933b3be47662dd0169:
+  reconstruction-image-prep@https://codeload.github.com/yosun/ai-image-prep/tar.gz/af80ef43f101ebdf6c7da3933b3be47662dd0169(patch_hash=bf7997ccdf787e1e9c575624dfdbf2b1f2fe8cae03a9292c0289c147454127d4):
     dependencies:
       '@huggingface/transformers': 4.2.0
       heic-to: 1.5.2

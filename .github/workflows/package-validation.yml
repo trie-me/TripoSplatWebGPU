@@ -42,8 +42,14 @@ jobs:
       - name: Typecheck root application
         run: pnpm typecheck
 
+      - name: Audit tracked files for public release
+        run: pnpm audit:public
+
       - name: Run unit tests
         run: pnpm test
+
+      - name: Run TripoSplat package tests
+        run: pnpm --filter @ai3d/triposplat-webgpu test
 
       - name: Lint source
         run: pnpm lint

@@ -3,11 +3,6 @@ export {
   loadGraph,
   runGraph,
 } from './runtime.js'
-export { runMacMpsFlow } from './mac-mps-flow.js'
-export type {
-  MacMpsFlowRequest,
-  MacMpsFlowResult,
-} from './mac-mps-flow.js'
 export type {
   CreateRuntimeOptions,
   GraphInfo,

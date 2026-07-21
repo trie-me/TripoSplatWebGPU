@@ -1,6 +1,7 @@
 {
   "name": "@ai3d/triposplat-webgpu",
   "version": "0.1.0-alpha.0",
+  "private": true,
   "description": "Framework-neutral browser WebGPU runtime and numerical building blocks for TripoSplat.",
   "type": "module",
   "sideEffects": false,
@@ -47,6 +48,15 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ai3d-dev/TripoSplatWebGPU.git",
+    "directory": "packages/triposplat-webgpu"
+  },
+  "homepage": "https://github.com/ai3d-dev/TripoSplatWebGPU/tree/main/packages/triposplat-webgpu#readme",
+  "bugs": {
+    "url": "https://github.com/ai3d-dev/TripoSplatWebGPU/issues"
   },
   "keywords": [
     "triposplat",

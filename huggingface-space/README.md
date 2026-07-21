@@ -1,6 +1,6 @@
 ---
 title: TripoSplat WebGPU
-short_description: Browser-local image-to-3D Gaussian splat generation with WebGPU.
+short_description: Browser-local image-to-3D Gaussian splats with WebGPU.
 emoji: 🫧
 colorFrom: blue
 colorTo: purple
@@ -25,7 +25,7 @@ The app downloads versioned model artifacts directly from [Yosun/TripoSplat-WebG
 
 > **Engineering preview:** the four-step prepared-image path has a structural/export/viewer pass but misses a stricter diagnostic. Whole-scene numerical/render parity, repeated-run memory behavior, Edge, and 16 GB devices are not yet qualified.
 
-[Source, status, benchmarks, and issue tracker](https://github.com/yosun/TripoSplatWebGPU) · [Vercel mirror](https://triposplat-webgpu.vercel.app/e2e-web)
+[Source, status, benchmarks, and issue tracker](https://github.com/ai3d-dev/TripoSplatWebGPU) · [Vercel mirror](https://triposplat-webgpu.vercel.app/e2e-web)
 
 ## Deploy this card and the prebuilt app
 

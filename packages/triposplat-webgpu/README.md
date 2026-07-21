@@ -12,7 +12,7 @@ npm install ./ai3d-gaussian-scene-0.0.0.tgz ./ai3d-triposplat-webgpu-0.1.0-alpha
 
 After both packages are released, the intended registry command is `npm install @ai3d/triposplat-webgpu`.
 
-The package uses browser WebGPU by default and has no React, viewer, Vite, or Next.js dependency. It ships an ESM worker plus its ONNX Runtime WASM asset. An opt-in Mac path can send only the fixed intermediate flow tensors to an authenticated loopback PyTorch/MPS service; non-loopback endpoints are rejected. Serve package assets with the same origin or correct CORS headers.
+The package is browser-only at runtime and has no React, viewer, Vite, or Next.js dependency. It ships an ESM worker plus its ONNX Runtime WASM asset. Serve package assets with the same origin or correct CORS headers.
 
 For a copy-ready image-in/PLY-and-`.splat`-out adapter and platform recipes, see the repository's [direct and agent integration guide](../../docs/agent-integration.md) and [`examples/direct`](../../examples/direct).
 
@@ -71,15 +71,6 @@ console.log(model.capabilities)
 // configured. It rejects with GraphCapabilityError when any stage is missing.
 // Omit removeBackground only when all inputs already carry alpha or are the
 // exact prepared RGB-on-black representation.
-const scene = await model.generate(file, {
-  steps: 20,
-  // Optional exact Mac flow backend. When omitted, DiT stays on WebGPU.
-  macMpsFlow: {
-    serviceUrl: 'http://127.0.0.1:8765/',
-    token: localServiceToken,
-  },
-})
-scene.dispose()
 await model.dispose()
 ```
 
@@ -181,7 +172,7 @@ The built-in worker retains the positive and all-zero DiT conditioning tensors o
 
 High-level generations are serialized because the staged executor deliberately reuses fixed graph session IDs. A queued call with an aborted signal rejects promptly. Cancelling worker configuration, graph creation, reusable-input retention, or inference terminates the one-shot worker and clears the loaded runtime; the same `TripoSplatWebGPU` instance can then load a fresh worker and retry. `dispose()` is idempotent, terminates pending worker work, and waits for queued generation work to unwind. These paths have deterministic worker tests; repeated full-model cancellation/retry remains a real-browser release gate.
 
-The official 20-step browser loop has a completed 40-invocation Chrome/WebGPU measurement, but accumulated latent drift exceeds both the qualification and strict gates. The opt-in Mac MPS service instead executes the untouched official fp32 sampler and is bit-exact on the same fixture: both final tensors have zero maximum error and pass qualification plus strict gates. Its recorded M3 Max inference time is 347.09 seconds after a 2.25-second model load. Microsoft Edge and the 16 GB Apple Silicon target still have no completed result. See [Current status](../../docs/current-status.md) for exact tolerances, metrics, and evidence files.
+The official 20-step browser loop has a completed 40-invocation Chrome/WebGPU measurement, but accumulated latent drift exceeds both the qualification and strict gates. Microsoft Edge and the 16 GB Apple Silicon target still have no completed result. See [Current status](../../docs/current-status.md) for exact tolerances, metrics, and evidence files.
 
 ## Current limitations
 

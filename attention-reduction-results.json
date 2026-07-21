@@ -510,12 +510,12 @@
     "torch_mps_available": true
   },
   "fixture": {
-    "directory": "/Users/mbp16_2022_m1max/MyTests/TripoSplatWebGPU/public/fixtures/generated/flow4-fp32-trajectory",
+    "directory": "$REPO/public/fixtures/generated/flow4-fp32-trajectory",
     "invocations": [
       7,
       8
     ],
-    "manifest": "/Users/mbp16_2022_m1max/MyTests/TripoSplatWebGPU/public/fixtures/generated/flow4-fp32-trajectory/flow.json",
+    "manifest": "$REPO/public/fixtures/generated/flow4-fp32-trajectory/flow.json",
     "manifest_sha256": "c657a2c42c520d60be7dbec897120f77a5b1ee955ac09d14966f64463c265a7e",
     "paired_dynamic_inputs": {
       "camera": {
@@ -20870,7 +20870,7 @@
           "runtime_attributable_rmse_excess": 1.3912271201334562e-07
         }
       ],
-      "source": "/Users/mbp16_2022_m1max/MyTests/TripoSplatWebGPU/public/fixtures/generated/flow4-fp32-trajectory/flow.json invocation=7 step=4 pass=conditional",
+      "source": "$REPO/public/fixtures/generated/flow4-fp32-trajectory/flow.json invocation=7 step=4 pass=conditional",
       "tensor_manifests": {
         "adapted_pytorch": {
           "attention_input": {
@@ -41714,7 +41714,7 @@
           "runtime_attributable_rmse_excess": 0.0
         }
       ],
-      "source": "/Users/mbp16_2022_m1max/MyTests/TripoSplatWebGPU/public/fixtures/generated/flow4-fp32-trajectory/flow.json invocation=8 step=4 pass=unconditional",
+      "source": "$REPO/public/fixtures/generated/flow4-fp32-trajectory/flow.json invocation=8 step=4 pass=unconditional",
       "tensor_manifests": {
         "adapted_pytorch": {
           "attention_input": {

@@ -2,11 +2,11 @@
   "artifacts": [
     {
       "bytes": 10821268,
-      "path": "/Users/mbp16_2022_m1max/MyTests/TripoSplatWebGPU/public/models/triposplat/gaussian_decoder_fp32.onnx"
+      "path": "$REPO/public/models/triposplat/gaussian_decoder_fp32.onnx"
     },
     {
       "bytes": 1083398016,
-      "path": "/Users/mbp16_2022_m1max/MyTests/TripoSplatWebGPU/public/models/triposplat/gaussian_decoder_fp32.onnx.data"
+      "path": "$REPO/public/models/triposplat/gaussian_decoder_fp32.onnx.data"
     }
   ],
   "comparison": {
@@ -124,7 +124,7 @@
   },
   "passed": true,
   "runtime": {
-    "onnx": "/Users/mbp16_2022_m1max/MyTests/TripoSplatWebGPU/public/models/triposplat/gaussian_decoder_fp32.onnx",
+    "onnx": "$REPO/public/models/triposplat/gaussian_decoder_fp32.onnx",
     "onnxruntime": "1.27.0",
     "ort_providers": [
       "CPUExecutionProvider"
@@ -134,7 +134,7 @@
     "torch": "2.13.0",
     "torch_device": "mps"
   },
-  "saved_fixture": "/Users/mbp16_2022_m1max/MyTests/TripoSplatWebGPU/public/fixtures/generated/gaussian-decoder-fp32.npz",
+  "saved_fixture": "$REPO/public/fixtures/generated/gaussian-decoder-fp32.npz",
   "tolerance": {
     "atol": 0.008,
     "rtol": 0.005

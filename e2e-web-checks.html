@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#070a12" />
+    <meta name="application-version" content="{{APP_VERSION}}" />
+    <meta name="application-build-time" content="{{APP_BUILD_TIME}}" />
+    <meta name="description" content="Debug WebGPU and cached TripoSplat model compatibility without downloading model artifacts." />
+    <title>TripoSplat WebGPU · Compatibility Checks</title>
+    <link rel="stylesheet" href="/src/e2e-web-checks.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a href="/e2e-web-debug.html">TRIPOSPLAT <b>WEBGPU</b></a>
+      <span>CHECKS · v{{APP_VERSION}} · {{APP_BUILD_LABEL}}</span>
+    </header>
+    <main>
+      <header class="hero">
+        <p class="eyebrow">DEBUG / DEVICE QUALIFICATION</p>
+        <h1>WebGPU model checks</h1>
+        <p>Tests this browser’s adapter, device, compute path, ONNX Runtime WebGPU provider, model storage, and—when already cached—one real DiT invocation.</p>
+        <div id="overall" class="overall" data-state="running">Running browser checks…</div>
+      </header>
+
+      <section class="panel controls" aria-labelledby="configuration-heading">
+        <div><p class="eyebrow">CONFIGURATION</p><h2 id="configuration-heading">Model and actions</h2></div>
+        <label for="model-base">Model CDN directory</label>
+        <div class="input-row">
+          <input id="model-base" type="url" spellcheck="false" />
+          <button id="run-checks" type="button">Run checks</button>
+        </div>
+        <p class="note">Only <code>manifest.json</code> and the embedded 192-byte ONNX canary are read during normal checks. Production model artifacts are never downloaded by this page.</p>
+        <div class="actions">
+          <button id="run-dit" type="button" disabled>Run cached-only DiT probe</button>
+          <button id="copy-report" type="button" disabled>Copy report</button>
+        </div>
+        <p id="dit-help" class="note">The DiT probe becomes available only when every required DiT artifact already exists in one verified browser cache backend.</p>
+      </section>
+
+      <section class="panel" aria-labelledby="stages-heading">
+        <div><p class="eyebrow">STAGED PREFLIGHT</p><h2 id="stages-heading">WebGPU and ONNX Runtime</h2></div>
+        <ol id="stage-list" class="stage-list" aria-live="polite"><li data-state="running">Starting checks…</li></ol>
+      </section>
+      <section class="panel" aria-labelledby="cache-heading">
+        <div><p class="eyebrow">NO-DOWNLOAD INVENTORY</p><h2 id="cache-heading">Existing model cache</h2></div>
+        <p id="manifest-status" class="status-line">Waiting for the manifest…</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Backend</th><th>Available</th><th>Artifacts</th><th>Stored</th><th>DiT probe</th></tr></thead>
+            <tbody id="cache-rows"><tr><td colspan="5">Inspecting OPFS and Cache API…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="evidence-heading">
+        <div><p class="eyebrow">TECHNICAL EVIDENCE</p><h2 id="evidence-heading">Report</h2></div>
+        <pre id="report" tabindex="0">No report yet.</pre>
+      </section>
+    </main>
+    <footer><a href="/e2e-web-debug.html">Generator</a><a href="/e2e-lab.html">Qualification lab</a><a href="https://github.com/ai3d-dev/TripoSplatWebGPU">Source</a></footer>
+    <script type="module" src="/src/e2eWebChecksMain.ts"></script>
+  </body>
+</html>

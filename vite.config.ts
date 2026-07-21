@@ -1,7 +1,11 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
-import { cpSync, mkdirSync } from 'node:fs'
+import { cpSync, mkdirSync, rmSync } from 'node:fs'
 import { resolve } from 'node:path'
+
+const APP_VERSION = '0.1.0-debug.1'
+const APP_BUILD_TIME = new Date().toISOString()
+const APP_BUILD_LABEL = APP_BUILD_TIME.slice(0, 16).replace('T', ' ') + 'Z'
 
 /**
  * Model weights and parity fixtures live under public/ for local development,
@@ -13,19 +17,46 @@ import { resolve } from 'node:path'
  * Only the ORT WASM fallback assets and the social-preview image are
  * application-owned static files.
  */
-function copyRuntimeAssets() {
+function copyRuntimeAssets(): Plugin {
   return {
     name: 'copy-runtime-assets',
+    transformIndexHtml(html) {
+      return html
+        .replaceAll('{{APP_VERSION}}', APP_VERSION)
+        .replaceAll('{{APP_BUILD_TIME}}', APP_BUILD_TIME)
+        .replaceAll('{{APP_BUILD_LABEL}}', APP_BUILD_LABEL)
+    },
+    configureServer(server) {
+      server.middlewares.use((request, _response, next) => {
+        if (request.url?.startsWith('/e2e-web.html')) {
+          request.url = request.url.replace('/e2e-web.html', '/e2e-web-debug.html')
+        }
+        next()
+      })
+    },
     closeBundle() {
       const outputDirectory = resolve('dist')
-      mkdirSync(outputDirectory, { recursive: true })
-      cpSync(resolve('public/ort'), resolve(outputDirectory, 'ort'), {
-        recursive: true,
-      })
+      const ortOutputDirectory = resolve(outputDirectory, 'ort')
+      rmSync(ortOutputDirectory, { recursive: true, force: true })
+      mkdirSync(ortOutputDirectory, { recursive: true })
+      for (const file of [
+        'ort-wasm-simd-threaded.asyncify.mjs',
+        'ort-wasm-simd-threaded.asyncify.wasm',
+      ]) {
+        cpSync(resolve('public/ort', file), resolve(ortOutputDirectory, file))
+      }
       cpSync(resolve('public/vite.svg'), resolve(outputDirectory, 'vite.svg'))
       cpSync(
         resolve('public/corgi.ceo_image_header.social.jpg'),
         resolve(outputDirectory, 'corgi.ceo_image_header.social.jpg'),
+      )
+
+      // Keep the established production route as the default while exposing
+      // the diagnostic build at a second path on the same origin. Both pages
+      // therefore share the browser's verified model cache.
+      cpSync(
+        resolve(outputDirectory, 'e2e-web-debug.html'),
+        resolve(outputDirectory, 'e2e-web.html'),
       )
     },
   }
@@ -40,7 +71,9 @@ export default defineConfig({
     rollupOptions: {
       input: {
         app: 'index.html',
-        e2eWeb: 'e2e-web.html',
+        learn: 'learn.html',
+        e2eWebDebug: 'e2e-web-debug.html',
+        e2eWebChecks: 'e2e-web-checks.html',
         e2eWebAnim: 'e2e-web-anim.html',
         sharpLab: 'sharp-lab.html',
         encoderLab: 'encoder-lab.html',

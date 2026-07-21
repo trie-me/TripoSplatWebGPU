@@ -92,7 +92,7 @@
   },
   "passed": false,
   "runtime": {
-    "onnx": "/Users/mbp16_2022_m1max/MyTests/TripoSplatWebGPU/public/models/triposplat/dinov3_encoder_chunked.onnx",
+    "onnx": "$REPO/public/models/triposplat/dinov3_encoder_chunked.onnx",
     "onnxruntime": "1.27.0",
     "ort_providers": [
       "CPUExecutionProvider"

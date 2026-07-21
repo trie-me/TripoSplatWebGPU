@@ -1,12 +1,11 @@
 # TripoSplat WebGPU
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/yosun/TripoSplatWebGPU/main/public/corgi.ceo_image_header.social.jpg" alt="TripoSplat WebGPU — browser-local image to 3D" />
+  <img src="https://raw.githubusercontent.com/ai3d-dev/TripoSplatWebGPU/main/public/corgi.ceo_image_header.social.jpg" alt="TripoSplat WebGPU — browser-local image to 3D" />
 </p>
 
-[![Package validation](https://github.com/yosun/TripoSplatWebGPU/actions/workflows/package-validation.yml/badge.svg)](https://github.com/yosun/TripoSplatWebGPU/actions/workflows/package-validation.yml)
+[![Package validation](https://github.com/ai3d-dev/TripoSplatWebGPU/actions/workflows/package-validation.yml/badge.svg)](https://github.com/ai3d-dev/TripoSplatWebGPU/actions/workflows/package-validation.yml)
 ![WebGPU required](https://img.shields.io/badge/WebGPU-required-4285F4)
-[![Hugging Face V2](https://img.shields.io/badge/🤗%20Hugging%20Face-V2%20exact%2020--step-FFD21E)](https://huggingface.co/spaces/Yosun/TripoSplat-WebGPU-v2)
 [![Hugging Face Space](https://img.shields.io/badge/🤗%20Hugging%20Face-browser--local%20demo-FFD21E)](https://huggingface.co/spaces/Yosun/TripoSplat-WebGPU-Demo)
 [![Vercel demo](https://img.shields.io/badge/Vercel-browser--local%20demo-c6ff4a?logo=vercel&logoColor=black)](https://triposplat-webgpu.vercel.app/e2e-web)
 <a href="https://www.producthunt.com/products/triposplat-webgpu?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-triposplat-webgpu" target="_blank" rel="noopener noreferrer"><img alt="TripoSplat WebGPU - Image to 3D Model: Offline. Local. Portable. | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1198682&amp;theme=light&amp;t=1784320164461"></a>
@@ -15,11 +14,23 @@ A working, browser-local WebGPU engineering preview of [TripoSplat](https://gith
 
 ## Try the browser-local demos
 
-- **[Hugging Face V2 exact Mac runner](https://huggingface.co/spaces/Yosun/TripoSplat-WebGPU-v2)** — qualified 20-step runner using the authenticated local fp32 MPS sampler.
 - **[Hugging Face Space](https://huggingface.co/spaces/Yosun/TripoSplat-WebGPU-Demo)** — static Vite demo, with no Hugging Face inference compute.
 - **[Vercel runner](https://triposplat-webgpu.vercel.app/e2e-web)** — public browser runner; [`/e2e-lab.html`](https://triposplat-webgpu.vercel.app/e2e-lab) is the fixture-driven qualification surface.
+- **[How TripoSplat works](https://triposplat-webgpu.vercel.app/learn)** — instructional subsite covering the model, browser port, and wider WebGPU portability pattern.
 
 Both deployments are static front ends: the model package is fetched directly from [Yosun/TripoSplat-WebGPU](https://huggingface.co/Yosun/TripoSplat-WebGPU), while model inference and exports run locally in the browser. The model layer does not upload source pixels, although deployment analytics, CDN logs, browser extensions, and an image URL's host are separate privacy considerations.
+
+## Learn how TripoSplat works
+
+The [instructional subsite](https://triposplat-webgpu.vercel.app/learn) explains the same image-to-3D system at three levels. Each track can be read independently:
+
+1. **[Generalist](https://triposplat-webgpu.vercel.app/learn#generalist)** — an intuition-first account of single-image inference, 3D Gaussian splats, the five-stage pipeline, and browser-local execution.
+2. **[Undergraduate mathematics](https://triposplat-webgpu.vercel.app/learn#undergrad)** — Gaussian covariance and compositing, rectified-flow sampling, classifier-free guidance, Euler integration, octree occupancy, and tensor shapes.
+3. **[Researcher and systems engineer](https://triposplat-webgpu.vercel.app/learn#researcher)** — graph contracts, ONNX/WebGPU partitioning, artifact delivery, memory pressure, numerical validation, and current release gates.
+
+The shared **[generalized platform guide](https://triposplat-webgpu.vercel.app/learn#platform)** extends beyond TripoSplat. It classifies feed-forward reconstructors, diffusion and flow models, sparse spatial decoders, neural renderers, classical vision pipelines, and mesh generators by WebGPU portability. It also provides an eight-step procedure for partitioning and validating similar Python/CUDA inference systems for browser execution.
+
+The guide is educational documentation, not additional validation evidence. It preserves the limitations recorded in [Current status](docs/current-status.md), and the official TripoSplat PyTorch implementation remains the numerical source of truth. For local development, open `/learn.html`; the production clean URL is `/learn`. A static Hugging Face mirror is also available at [`/learn.html`](https://yosun-triposplat-webgpu-demo.static.hf.space/learn.html).
 
 ### Recorded result animations
 
@@ -27,9 +38,9 @@ These are animated WebP browser recordings from the tester results:
 
 <table>
   <tr>
-    <td><strong>Cartoon House</strong><br><img src="https://raw.githubusercontent.com/yosun/TripoSplatWebGPU/main/public/_testers/results/Cartoon%20House/cartoon.house.webp" alt="Cartoon House" width="320"></td>
-    <td><strong>Women's Shoes</strong><br><img src="https://raw.githubusercontent.com/yosun/TripoSplatWebGPU/main/public/_testers/results/Womens%20Shoes%20Red/womens.shoes.webp" alt="Women's Shoes" width="320"></td>
-    <td><strong>[Corgi.ceo](https://corgi.ceo) Basket</strong><br><img src="https://raw.githubusercontent.com/yosun/TripoSplatWebGPU/main/public/_testers/results/corgi.ceo-basket/corgi.ceo-basket.webp" alt="Corgi CEO Basket" width="320"></td>
+    <td><strong>Cartoon House</strong><br><img src="https://raw.githubusercontent.com/ai3d-dev/TripoSplatWebGPU/main/public/_testers/results/Cartoon%20House/cartoon.house.webp" alt="Cartoon House" width="320"></td>
+    <td><strong>Women's Shoes</strong><br><img src="https://raw.githubusercontent.com/ai3d-dev/TripoSplatWebGPU/main/public/_testers/results/Womens%20Shoes%20Red/womens.shoes.webp" alt="Women's Shoes" width="320"></td>
+    <td><strong>[Corgi.ceo](https://corgi.ceo) Basket</strong><br><img src="https://raw.githubusercontent.com/ai3d-dev/TripoSplatWebGPU/main/public/_testers/results/corgi.ceo-basket/corgi.ceo-basket.webp" alt="Corgi CEO Basket" width="320"></td>
   </tr>
 </table>
 
@@ -42,11 +53,10 @@ The current runner source accepts PNG, WebP, JPEG, and AVIF. Alpha-bearing image
 - Use desktop Chrome with WebGPU. The only recorded qualification environment is Chrome 150 on an Apple M3 Max with 128 GB unified memory; Edge, 16 GB Apple Silicon, Safari, Firefox, and Windows GPUs are not yet qualified.
 - Allow roughly 6.47 GB for the first verified model download and browser cache. Cache persistence depends on browser storage and quota.
 - The portable WebGPU runner requests 20 sampling steps / 40 CFG DiT calls and can take several minutes on the recorded high-end hardware. That path executes but fails its recorded qualification and strict final-state gates.
-- The opt-in Mac-local PyTorch/MPS path now passes the unchanged 20-step fixture bit-for-bit. On the recorded M3 Max it loaded in 2.25 seconds and sampled in 347.09 seconds, versus 676.67 seconds for the historical conservative WebGPU run.
 
 This is an engineering preview, not a production or broad-hardware support claim. The four-step prepared-image path has a structural/export/viewer pass but misses a stricter diagnostic; official whole-scene and rendered-pixel parity, repeated full-generation memory behavior, and production CDN/OPFS qualification remain open. See [Current status](docs/current-status.md) before integrating or benchmarking.
 
-**[View the source, benchmarks, and issue tracker on GitHub →](https://github.com/yosun/TripoSplatWebGPU)**
+**[View the source, benchmarks, and issue tracker on GitHub →](https://github.com/ai3d-dev/TripoSplatWebGPU)**
 
 ## Local development
 
@@ -56,17 +66,13 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Open `http://localhost:<PORT>/e2e-web.html`. Test inputs and recorded outputs are stored in [`public/_testers`](https://github.com/yosun/TripoSplatWebGPU/tree/main/public/_testers).
+Open `http://localhost:<PORT>/e2e-web-debug.html`. Test inputs and recorded outputs are stored in [`public/_testers`](https://github.com/ai3d-dev/TripoSplatWebGPU/tree/main/public/_testers).
 
-### Exact 20-step Mac path
+### Native Apple Silicon reference
 
-The Mac launcher keeps DINO, VAE, octree, Gaussian decoding, exports, and the viewer in the browser, but runs all 40 DiT/CFG/Euler invocations through the untouched official fp32 PyTorch sampler on local MPS. It requires the official checkout, weights, and Python environment; the defaults below match this repository's recorded Mac validation environment.
-
-```bash
-scripts/triposplat/start_mac_20_step.sh
-```
-
-The launcher prints the authenticated runner URL. The token is accepted once, moved into tab-scoped session storage, and removed from the address bar. Override dependency locations with `TRIPOSPLAT_PYTHON`, `TRIPOSPLAT_OFFICIAL_REPO`, and `TRIPOSPLAT_FLOW_WEIGHTS`.
+The exact native runner has been extracted into the separate `TripoSplatMac`
+project. It is a native PySide6/PyTorch application and numerical fixture
+oracle, not a WebGPU backend or a dependency of this static browser project.
 
 ## Hugging Face Space deployment
 
@@ -88,7 +94,7 @@ hf repos cp huggingface-space/README.md \
 Upload the Space card after the bundle because `dist/` does not contain `README.md`. Do not upload local model artifacts, credentials, caches, or uncommitted experiment files. Hugging Face may require a paid plan or account credits to activate updated Static Space hosting; check current Spaces pricing before deployment.
 
 
-> **Current milestone, not a production release.** The alpha `@ai3d/triposplat-webgpu` workspace package contains the five-stage browser executor and a complete 6.465 GB fp32 manifest. A measured prepared-image run completes the packaged browser path, exports 262,144 finite Gaussians, and loads the PLY into the retained browser viewer. The portable WebGPU 20-step loop still fails its final-state gate; the opt-in Mac MPS sampler now passes the same fixture bit-for-bit and is the qualified Mac quality path. Official whole-scene/render parity, bundled BiRefNet, Edge/16 GB qualification, and production memory measurements remain release blockers. See [Current status](docs/current-status.md) before integrating or benchmarking this work.
+> **Current milestone, not a production release.** The alpha `@ai3d/triposplat-webgpu` workspace package contains the five-stage browser executor and a complete 6.465 GB fp32 manifest. A measured prepared-image run completes the packaged browser path, exports 262,144 finite Gaussians, and loads the PLY into the retained browser viewer. The WebGPU 20-step loop still fails its final-state gate. Official whole-scene/render parity, bundled BiRefNet, Edge/16 GB qualification, and production memory measurements remain release blockers. See [Current status](docs/current-status.md) before integrating or benchmarking this work.
 
 ## Verified status
 
@@ -99,7 +105,6 @@ Upload the Space card after the bundle because `dist/` does not contain `README.
 | One exported fp32 DiT invocation | **STRICT PASS** against untouched official PyTorch | [DiT WebGPU validation](docs/validation/2026-07-15-dit-step-webgpu-fp32-chrome.json) |
 | Four-step CFG/Euler browser loop | Eight calls complete; **qualification PASS, strict diagnostic FAIL** | [Four-step benchmark](docs/benchmarks/2026-07-15-flow4-fp32-webgpu.json) |
 | Twenty-step guided sampling | Forty calls complete; **qualification and strict FAIL** | [Twenty-step benchmark](docs/benchmarks/2026-07-15-flow20-fp32-webgpu.json) |
-| Twenty-step guided sampling on Mac MPS | **BIT-EXACT PASS**; qualification and strict gates pass with zero error | [Mac MPS service validation](docs/validation/2026-07-18-flow20-mac-mps-service.json) |
 | Eight-level fp32 octree trajectory | **PASS** for logits, padding independence, resampling, and final points | [Octree trajectory validation](docs/validation/2026-07-15-octree-trajectory-webgpu-fp32-chrome.json) |
 | fp32 Gaussian feature decoder | **PASS** on WebGPU for raw `[1,8192,480]` features | [Gaussian decoder WebGPU benchmark](docs/benchmarks/2026-07-14-gaussian-decoder-webgpu.json); final scene parity remains open |
 | Packaged prepared-image end-to-end path | **STRUCTURAL/VIEWER PASS**: all five stages, 262,144 finite Gaussians, PLY and `.splat` export, ready viewer canvas | [End-to-end viewer benchmark](docs/benchmarks/2026-07-15-e2e-render-structural-webgpu-fp32-chrome.json); whole-scene numerical/render parity is not claimed |
@@ -115,7 +120,6 @@ Upload the Space card after the bundle because `dist/` does not contain `README.
 
 - **The packaged browser-local pipeline works end to end at the structural level.** The recorded prepared-image run completed DINOv3, Flux VAE, eight DiT calls, eight octree levels, Gaussian decoding, PLY/`.splat` export, and viewer loading. It produced 262,144 finite Gaussians. This is a structural/export/viewer pass, not a whole-scene numerical or rendered-pixel parity claim.
 - **The isolated fp32 stages are strongly validated on the recorded fixture.** DINOv3, Flux VAE, one DiT invocation, the complete eight-level octree trajectory, and the raw Gaussian decoder pass their declared browser gates. The four-step CFG/Euler loop completes and passes its qualification envelope, while still failing the separately recorded stricter latent diagnostic.
-- **The Mac 20-step path is bit-exact and materially faster.** The authenticated loopback service uses untouched official fp32 PyTorch/MPS for all 40 flow calls. On the recorded M3 Max, final latent/camera hashes match exactly, both gates pass with zero error, model load is 2.25 seconds, and sampling is 347.09 seconds. The browser skips the 1.64 GB DiT artifact on this path.
 - **The portable WebGPU 20-step fallback completes but is not parity-qualified.** All 40 WebGPU DiT calls finish without fallback, but accumulated latent drift fails both qualification and strict final-state gates (`0.0487093` maximum absolute error; `0.9999996593` cosine similarity). A community RTX 3090-class warm-OPFS report completed in 7m 52s, with 5m 2s in DiT inference and only 7ms in DiT readback; the same user found 20-step output visibly acceptable while four steps was too low quality. See the [field analysis and optimization direction](docs/rtx3090-20-step-performance.md).
 - **The remaining DiT discrepancy has been localized.** The first material conditional/unconditional split occurs in `context_refiner.0` attention at probability×V accumulation on the all-zero unconditional branch. ONNX Runtime CPU reproduces the initiating discrepancy, so it is not WebGPU-only; WebGPU introduces additional separation. The official sampler, CFG/Euler arithmetic, standalone octree, and standalone Gaussian decoder are not implicated as the initiating cause.
 - **The best bounded reduction candidate was a no-go.** K=256 probability×V chunking improved complete 20-step max/mean/RMSE error by approximately 14.6%/31.5%/30.3%, but remained outside tolerance, ran slower, and lacked a controlled paired visual comparison. The canonical graph and manifest therefore remain unchanged.
@@ -166,7 +170,8 @@ pnpm dev
 The development server exposes a public runner and engineering validation surfaces:
 
 - `/` — redirects to the public TripoSplat image-to-spatial-scene runner;
-- `/e2e-web.html` — public browser-local runner: visible file/URL image input, remote model-CDN configuration, compatibility checks, verified browser cache, generation, preview, and exports;
+- `/e2e-web.html` — established browser-local runner and default production route;
+- `/e2e-web-debug.html` — same-origin diagnostic route with visible file/URL image input, remote model-CDN configuration, compatibility checks, verified browser cache, cause-oriented diagnostics, generation, preview, and exports;
 - `/sharp-lab.html` — preserved legacy SHARP application path;
 - `/encoder-lab.html` — preprocessing and encoder vertical-slice comparison;
 - `/dit-lab.html` — one DiT invocation against a deterministic PyTorch fixture;
@@ -176,7 +181,7 @@ The development server exposes a public runner and engineering validation surfac
 - `/gaussian-lab.html` — one fp32 raw Gaussian-feature invocation.
 - `/e2e-lab.html` — complete prepared-image package execution, export qualification, and exported-PLY viewer/canvas sanity gate.
 
-The labs remain engineering fixtures rather than the package API. The public `/e2e-web.html` runner uses the package’s normal image-input path rather than deterministic fixtures, but it is still an engineering preview and does not make a production-readiness or numerical-parity claim.
+The labs remain engineering fixtures rather than the package API. The `/e2e-web.html` and `/e2e-web-debug.html` routes use the same built runner and model-cache namespace; the debug route makes its cause-oriented failure reports explicit without requiring a second model download. The runner is still an engineering preview and does not make a production-readiness or numerical-parity claim.
 
 ## Preserved SHARP baseline
 
@@ -221,7 +226,6 @@ Read the [browser architecture audit](docs/architecture-audit.md) for graph cont
 - [Framework integration examples](docs/framework-integration.md)
 - [Compatibility and measured benchmarks](docs/compatibility-and-benchmarks.md)
 - [RTX 3090-class 20-step performance and optimization direction](docs/rtx3090-20-step-performance.md)
-- [GPT-5.6 Sol performance continuation prompt](docs/gpt-5.6-sol-performance-continuation-prompt.md)
 - [Gaussian conventions and export](docs/gaussian-conventions.md)
 - [Privacy and security](docs/privacy-and-security.md)
 - [Troubleshooting](docs/troubleshooting.md)
@@ -248,12 +252,14 @@ TripoSplat WebGPU was directed, developed, tested, and validated by
 
 assistance from OpenAI Codex using GPT-5.6 Sol Ultra and GPT-5.6 Sol Max in Kiro.
 
-The repository began from the `ml-sharp-web` application chassis, whose
+The repository began from the `ml-sharp-web` application chassis. This
 
-original Git history is retained for provenance. Names shown by GitHub in
+repository's Git history starts from a clean project snapshot so its contributor
 
-the contributor panel therefore include upstream contributors and do not
+panel reflects work on the TripoSplat WebGPU port. The prior integration history
 
-represent authorship of the TripoSplat WebGPU port.
+remains available in the [archived repository](https://github.com/yosun/TripoSplatWebGPU),
+
+and upstream source references are recorded in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 The official TripoSplat implementation remains the numerical source of truth.

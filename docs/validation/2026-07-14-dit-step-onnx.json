@@ -144,7 +144,7 @@
     }
   },
   "inputs": {
-    "source": "/Users/mbp16_2022_m1max/MyTests/TripoSplatWebGPU/public/fixtures/generated/dit-step-fp32/fixture.npz",
+    "source": "$REPO/public/fixtures/generated/dit-step-fp32/fixture.npz",
     "summaries": {
       "camera": {
         "count": 5,
@@ -346,9 +346,9 @@
   },
   "runtime": {
     "external_data": [
-      "/Users/mbp16_2022_m1max/MyTests/TripoSplatWebGPU/public/models/triposplat/dit_step.onnx.data"
+      "$REPO/public/models/triposplat/dit_step.onnx.data"
     ],
-    "graph": "/Users/mbp16_2022_m1max/MyTests/TripoSplatWebGPU/public/models/triposplat/dit_step.onnx",
+    "graph": "$REPO/public/models/triposplat/dit_step.onnx",
     "graph_internal_precision_metadata": "fp16",
     "onnx": "1.22.0",
     "onnxruntime": "1.27.0",

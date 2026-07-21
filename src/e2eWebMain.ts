@@ -17,7 +17,7 @@ import {
   type CompatibilityReport,
   type GenerationProgress,
   type LoadProgress,
-  type MacMpsFlowBackendOptions,
+  type RuntimeStatus,
 } from '../packages/triposplat-webgpu/dist/index.js'
 import { SplatPreview, type SplatPreviewStatus } from './components/SplatPreview'
 
@@ -26,48 +26,8 @@ const MODEL_LARGEST_ARTIFACT_BYTES = 3_362_042_880
 const DEFAULT_MODEL_BASE = 'https://huggingface.co/Yosun/TripoSplat-WebGPU/resolve/main/triposplat-webgpu/0.1.0-fp32.20260715/'
 const DEFAULT_STEPS = 20
 const ACTIVE_RUN_STORAGE_KEY = 'triposplat.active-run.v1'
-const MPS_FLOW_STORAGE_KEY = 'triposplat.mac-mps-flow.v1'
-const REQUIRE_MAC_MPS_FLOW = import.meta.env.VITE_TRIPOSPLAT_RUNNER_MODE === 'mac-mps-required'
-const OFFICIAL_FLOW_COMMIT = 'a78fa12d06dbf1381ca548bfac32bb68cb8c451d'
-
-function configuredMacMpsFlow(): MacMpsFlowBackendOptions | undefined {
-  const parameters = new URLSearchParams(location.search)
-  const serviceUrl = parameters.get('mpsService')
-  const token = parameters.get('mpsToken')
-  if ((serviceUrl === null) !== (token === null)) {
-    console.warn('The Mac MPS path requires both mpsService and mpsToken query parameters.')
-    return undefined
-  }
-  if (serviceUrl !== null && token !== null) {
-    const configuration = { serviceUrl, token }
-    sessionStorage.setItem(MPS_FLOW_STORAGE_KEY, JSON.stringify(configuration))
-    parameters.delete('mpsService')
-    parameters.delete('mpsToken')
-    const query = parameters.toString()
-    history.replaceState(null, '', `${location.pathname}${query ? `?${query}` : ''}${location.hash}`)
-    return configuration
-  }
-  const saved = sessionStorage.getItem(MPS_FLOW_STORAGE_KEY)
-  if (saved === null) return undefined
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(saved)
-  } catch {
-    sessionStorage.removeItem(MPS_FLOW_STORAGE_KEY)
-    return undefined
-  }
-  if (
-    !isRecord(parsed)
-    || typeof parsed.serviceUrl !== 'string'
-    || typeof parsed.token !== 'string'
-  ) {
-    sessionStorage.removeItem(MPS_FLOW_STORAGE_KEY)
-    return undefined
-  }
-  return { serviceUrl: parsed.serviceUrl, token: parsed.token }
-}
-
-const MAC_MPS_FLOW = configuredMacMpsFlow()
+const APP_VERSION = document.querySelector<HTMLMetaElement>('meta[name="application-version"]')?.content ?? 'unknown'
+const APP_BUILD_TIME = document.querySelector<HTMLMetaElement>('meta[name="application-build-time"]')?.content ?? 'unknown'
 
 type FlowStage = 'source' | 'model' | 'conditioning' | 'sampling' | 'decode' | 'preview'
 type ProgressDetailMode = 'guided' | 'technical'
@@ -148,6 +108,16 @@ interface ActiveRunMarker {
   declaredModelBytes: number
 }
 
+interface FailureDiagnosis {
+  category: string
+  likelyCause: string
+  actions: string[]
+}
+
+interface RuntimeDiagnosticEvent extends RuntimeStatus {
+  observedAt: string
+}
+
 function requiredElement<T extends Element>(selector: string): T {
   const element = document.querySelector<T>(selector)
   if (!element) throw new Error(`Required public runner element '${selector}' was not found.`)
@@ -169,12 +139,6 @@ const sourcePanel = requiredElement<HTMLElement>('.web-controls')
 const modelBaseInput = requiredElement<HTMLInputElement>('#model-base')
 const modelStatus = requiredElement<HTMLElement>('#model-status')
 const cacheMode = requiredElement<HTMLElement>('#cache-mode')
-const mpsConnection = requiredElement<HTMLElement>('#mps-connection')
-const mpsConnectionBadge = requiredElement<HTMLElement>('#mps-connection-badge')
-const mpsConnectionStatus = requiredElement<HTMLElement>('#mps-connection-status')
-const mpsServiceUrlInput = requiredElement<HTMLInputElement>('#mps-service-url')
-const mpsServiceTokenInput = requiredElement<HTMLInputElement>('#mps-service-token')
-const mpsConnectButton = requiredElement<HTMLButtonElement>('#mps-connect')
 const generateButton = requiredElement<HTMLButtonElement>('#generate')
 const cancelButton = requiredElement<HTMLButtonElement>('#cancel')
 const clearCacheButton = requiredElement<HTMLButtonElement>('#clear-cache')
@@ -192,7 +156,10 @@ const benchmarkDetails = requiredElement<HTMLElement>('#benchmark-details')
 const copyBenchmarkButton = requiredElement<HTMLButtonElement>('#copy-benchmark')
 const diagnostics = requiredElement<HTMLElement>('#diagnostics')
 const diagnosticMessage = requiredElement<HTMLElement>('#diagnostic-message')
+const diagnosticCause = requiredElement<HTMLElement>('#diagnostic-cause')
+const diagnosticActions = requiredElement<HTMLOListElement>('#diagnostic-actions')
 const diagnosticDetails = requiredElement<HTMLElement>('#diagnostic-details')
+const copyDiagnosticsButton = requiredElement<HTMLButtonElement>('#copy-diagnostics')
 const platformBadge = requiredElement<HTMLElement>('#platform-badge')
 const compatibilityList = requiredElement<HTMLUListElement>('#compatibility-list')
 const previewMount = requiredElement<HTMLElement>('#web-preview-root')
@@ -221,7 +188,11 @@ let selectedImage: SelectedImage | undefined
 let imageSelectionSequence = 0
 let imagePreparer: ImagePreparer | undefined
 let activePreparationController: AbortController | undefined
+let lastImagePreparationProgress: PreparationProgress | undefined
 let model: TripoSplatWebGPU | undefined
+const runtimeDiagnosticEvents: RuntimeDiagnosticEvent[] = []
+const verboseRuntimeDiagnostics = new URLSearchParams(location.search).get('debug') === '1'
+let diagnosticReportText = ''
 let loadedModelBase: string | undefined
 let activeRunController: AbortController | undefined
 let busy = false
@@ -242,73 +213,6 @@ let latestRunStatus: RunStatusSnapshot = {
 }
 const retiredPlyUrls = new Set<string>()
 
-function renderMpsConnection(): void {
-  if (MAC_MPS_FLOW === undefined) {
-    mpsConnection.dataset.state = 'idle'
-    mpsConnectionBadge.textContent = 'NOT CONNECTED'
-    mpsConnectionStatus.dataset.state = 'idle'
-    mpsConnectionStatus.textContent = REQUIRE_MAC_MPS_FLOW
-      ? 'V2 requires the authenticated local Mac service before generation.'
-      : 'Connect for the bit-exact 20-step Mac path, or leave disconnected to use WebGPU.'
-    mpsConnectButton.textContent = 'Connect exact 20-step engine'
-    return
-  }
-  mpsConnection.dataset.state = 'ready'
-  mpsConnectionBadge.textContent = 'EXACT MPS READY'
-  mpsConnectionStatus.dataset.state = 'ready'
-  mpsConnectionStatus.textContent = `Configured ${MAC_MPS_FLOW.serviceUrl}. The browser will skip the WebGPU DiT artifact.`
-  mpsServiceUrlInput.value = MAC_MPS_FLOW.serviceUrl
-  mpsServiceTokenInput.value = ''
-  mpsServiceUrlInput.disabled = true
-  mpsServiceTokenInput.disabled = true
-  mpsConnectButton.textContent = 'Disconnect Mac MPS'
-}
-
-async function connectMacMpsFlow(): Promise<void> {
-  if (MAC_MPS_FLOW !== undefined) {
-    sessionStorage.removeItem(MPS_FLOW_STORAGE_KEY)
-    location.reload()
-    return
-  }
-  const serviceUrl = mpsServiceUrlInput.value.trim()
-  const token = mpsServiceTokenInput.value
-  if (token.length < 16) throw new Error('Paste the startup token printed by the Mac launcher.')
-  let base: URL
-  try {
-    base = new URL(serviceUrl)
-  } catch {
-    throw new Error('Enter the complete local service URL.')
-  }
-  if (
-    !['http:', 'https:'].includes(base.protocol)
-    || !['127.0.0.1', 'localhost', '[::1]'].includes(base.hostname)
-  ) {
-    throw new Error('The exact sampler service must use a loopback HTTP address.')
-  }
-  if (!base.pathname.endsWith('/')) base.pathname += '/'
-  mpsConnection.dataset.state = 'working'
-  mpsConnectionBadge.textContent = 'CHECKING'
-  mpsConnectionStatus.dataset.state = 'working'
-  mpsConnectionStatus.textContent = 'Checking the local model revision, precision, and readiness…'
-  const response = await fetch(new URL('v1/health', base), { mode: 'cors', cache: 'no-store' })
-  if (!response.ok) throw new Error(`The local Mac service returned HTTP ${response.status}.`)
-  const health: unknown = await response.json()
-  if (
-    !isRecord(health)
-    || health.ready !== true
-    || health.device !== 'mps'
-    || health.precision !== 'fp32'
-    || health.sourceCommit !== OFFICIAL_FLOW_COMMIT
-  ) {
-    throw new Error('The local service is not the qualified official fp32 MPS sampler.')
-  }
-  sessionStorage.setItem(MPS_FLOW_STORAGE_KEY, JSON.stringify({
-    serviceUrl: base.href,
-    token,
-  }))
-  location.reload()
-}
-
 function formatBytes(bytes: number): string {
   if (bytes < 1_024) return `${bytes} B`
   if (bytes < 1_024 ** 2) return `${(bytes / 1_024).toFixed(1)} KiB`
@@ -326,10 +230,7 @@ function isMobilePlatform(): boolean {
   return /iPhone|iPad|iPod|Android.*Mobile|Mobile.*Android/i.test(userAgent) || iPadDesktopMode
 }
 
-function summarizeModelManifest(
-  value: unknown,
-  omittedGraphs: ReadonlySet<string> = new Set(),
-): ModelManifestSummary {
+function summarizeModelManifest(value: unknown): ModelManifestSummary {
   if (!isRecord(value) || !isRecord(value.graphs)) throw new Error('The model manifest is missing its graph declarations.')
   const identity = [value.name, value.version, value.modelRevision, value.precision]
   if (!identity.every((part) => typeof part === 'string' && part.length > 0)) {
@@ -341,7 +242,6 @@ function summarizeModelManifest(
   for (const graphName of requiredGraphs) {
     const graph = value.graphs[graphName]
     if (!isRecord(graph)) throw new Error(`The model manifest is missing the required '${graphName}' graph.`)
-    if (omittedGraphs.has(graphName)) continue
     const lengths: unknown[] = [graph.byteLength]
     if (graph.externalData !== undefined && !Array.isArray(graph.externalData)) {
       throw new Error(`The '${graphName}' graph has an invalid external-data declaration.`)
@@ -362,9 +262,7 @@ function summarizeModelManifest(
   if (estimatedBytes !== undefined && (!Number.isSafeInteger(estimatedBytes) || (estimatedBytes as number) <= 0)) {
     throw new Error('The model manifest contains an invalid estimated model size.')
   }
-  const declaredBytes = omittedGraphs.size === 0
-    ? Math.max(summedBytes, typeof estimatedBytes === 'number' ? estimatedBytes : 0)
-    : summedBytes
+  const declaredBytes = Math.max(summedBytes, typeof estimatedBytes === 'number' ? estimatedBytes : 0)
   return {
     namespace: identity.join('/'),
     declaredBytes,
@@ -665,6 +563,8 @@ function buildBenchmarkReport(
   const deviceMemory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory
   const lines = [
     'TripoSplat WebGPU benchmark',
+    `App version: ${APP_VERSION}`,
+    `App build (UTC): ${APP_BUILD_TIME}`,
     `Completed (UTC): ${new Date().toISOString()}`,
     `Started (UTC): ${telemetry.startedAt}`,
     `End-to-end duration: ${formatDuration(totalDuration)}`,
@@ -744,13 +644,12 @@ function showBenchmarkReport(report: string, totalDuration: number): void {
   copyBenchmarkButton.textContent = 'Copy report'
 }
 
-async function copyBenchmarkReport(): Promise<void> {
-  if (!benchmarkReportText) return
+async function writeClipboard(text: string): Promise<void> {
   try {
-    await navigator.clipboard.writeText(benchmarkReportText)
+    await navigator.clipboard.writeText(text)
   } catch {
     const textarea = document.createElement('textarea')
-    textarea.value = benchmarkReportText
+    textarea.value = text
     textarea.style.position = 'fixed'
     textarea.style.opacity = '0'
     document.body.appendChild(textarea)
@@ -759,6 +658,11 @@ async function copyBenchmarkReport(): Promise<void> {
     textarea.remove()
     if (!copied) throw new Error('The browser denied clipboard access.')
   }
+}
+
+async function copyBenchmarkReport(): Promise<void> {
+  if (!benchmarkReportText) return
+  await writeClipboard(benchmarkReportText)
   copyBenchmarkButton.textContent = 'Copied'
   benchmarkSummary.textContent = 'Benchmark report copied to your clipboard.'
 }
@@ -915,9 +819,6 @@ function setBusy(next: boolean): void {
   modelBaseInput.disabled = next
   imageUrlInput.disabled = next
   clearCacheButton.disabled = next
-  mpsServiceUrlInput.disabled = next || MAC_MPS_FLOW !== undefined
-  mpsServiceTokenInput.disabled = next || MAC_MPS_FLOW !== undefined
-  mpsConnectButton.disabled = next
   updateGenerateButton()
   updatePrepareImageButton()
 }
@@ -926,8 +827,7 @@ function updateGenerateButton(): void {
   const compatible = compatibility?.supported === true
   const hasModelBase = modelBaseInput.value.trim().length > 0
   const storageReady = storageQualification?.supported === true
-  const exactFlowReady = !REQUIRE_MAC_MPS_FLOW || MAC_MPS_FLOW !== undefined
-  generateButton.disabled = busy || !compatible || !storageReady || platformRunBlocker !== undefined || !selectedImage || !hasModelBase || !exactFlowReady
+  generateButton.disabled = busy || !compatible || !storageReady || platformRunBlocker !== undefined || !selectedImage || !hasModelBase
   if (busy) {
     generateButton.classList.add('is-working')
     generateButton.firstElementChild!.textContent = 'Working in your browser…'
@@ -935,8 +835,6 @@ function updateGenerateButton(): void {
     generateButton.classList.remove('is-working')
     generateButton.firstElementChild!.textContent = platformRunBlocker
       ? 'Desktop browser required'
-      : !exactFlowReady
-        ? 'Connect the exact Mac MPS engine'
       : storageQualification?.supported === false
         ? 'Browser storage is insufficient'
         : selectedImage && hasModelBase
@@ -949,18 +847,271 @@ function updatePrepareImageButton(): void {
   prepareImageButton.disabled = busy || !selectedImage
 }
 
+function diagnosticValueText(value: unknown): string {
+  if (typeof value === 'string') return value
+  const seen = new WeakSet<object>()
+  try {
+    return JSON.stringify(value ?? {}, (_key, nested: unknown) => {
+      if (typeof nested === 'bigint') return nested.toString()
+      if (nested instanceof Error) {
+        return {
+          name: nested.name,
+          message: nested.message,
+          stack: nested.stack,
+          cause: nested.cause,
+        }
+      }
+      if (typeof nested === 'object' && nested !== null) {
+        if (seen.has(nested)) return '[Circular]'
+        seen.add(nested)
+      }
+      return nested
+    }, 2) ?? String(value)
+  } catch {
+    return String(value)
+  }
+}
+
+function diagnoseFailure(message: string, detailText: string): FailureDiagnosis {
+  const progress = lastImagePreparationProgress
+    ? `${lastImagePreparationProgress.stage} ${lastImagePreparationProgress.message}`
+    : ''
+  const evidence = `${message}\n${detailText}\n${runStage.textContent ?? ''}\n${progress}`.toLowerCase()
+
+  if (/shadermodule|compute pipeline|wgsl|pad node|with ['"]pad['"] label/.test(evidence)) {
+    const staleWasmFallback = /wasm-fp32/.test(evidence) && /webgpu|shader|compute pipeline/.test(evidence)
+    return {
+      category: 'WebGPU shader compilation failure',
+      likelyCause: staleWasmFallback
+        ? 'The page reported a WASM fallback but still compiled a WebGPU shader. That usually means an older cached worker or deployment is still running, or a failed WebGPU runtime leaked into the fallback.'
+        : 'The browser’s WebGPU implementation rejected an ONNX-generated shader for this GPU/driver combination. The image dimensions are usually not the cause.',
+      actions: [
+        'Hard-refresh the page and clear this site’s cached data so the latest WASM-first image worker is loaded.',
+        'Update Chrome or Edge, confirm hardware acceleration is enabled, then restart the browser.',
+        'If it repeats, copy this report—the failing node and shader label identify a browser/runtime compatibility defect.',
+      ],
+    }
+  }
+  if (/device.*lost|gpudevice.*lost|out of memory|allocation failed|memory pressure|gpu process/.test(evidence)) {
+    return {
+      category: 'GPU device or memory failure',
+      likelyCause: 'The browser lost its GPU device or could not reserve enough unified memory. Browser storage capacity does not guarantee that the 6.5 GB model and temporary GPU buffers fit at runtime.',
+      actions: [
+        'Close GPU-heavy tabs and applications, restart the browser, and retry once with a clean worker.',
+        'Keep the Mac connected to power and avoid running another WebGPU, video, or local-AI workload concurrently.',
+        'If the tab reloads without an error, macOS or the browser likely terminated the GPU process under memory pressure.',
+      ],
+    }
+  }
+  if (/quota|storage|opfs|cache.*insufficient|not enough.*storage/.test(evidence)) {
+    return {
+      category: 'Browser storage limitation',
+      likelyCause: 'The browser could not reserve or persist enough origin storage for the model artifacts.',
+      actions: [
+        'Free disk space and browser site data, then run the storage check again.',
+        'Use a normal browser profile rather than private/incognito mode.',
+        'Clear the model cache only if the report indicates corrupt or incomplete cached artifacts.',
+      ],
+    }
+  }
+  if (/integrity|checksum|sha-?256|did not match.*manifest|byte-length mismatch/.test(evidence)) {
+    return {
+      category: 'Model artifact integrity failure',
+      likelyCause: 'A downloaded or cached model file does not match the immutable manifest, commonly because of a stale CDN response or interrupted cache entry.',
+      actions: [
+        'Clear cached model files from this page and download them again.',
+        'Verify the model server serves the manifest and sidecars from the same revision.',
+        'Do not retry repeatedly without clearing the mismatched cached artifact.',
+      ],
+    }
+  }
+  if (/cors|failed to fetch|network|http 4\d\d|http 5\d\d|manifest.*(?:missing|read)|model server/.test(evidence)) {
+    return {
+      category: 'Model server or network failure',
+      likelyCause: 'The browser could not read a required manifest/model response, or the server did not permit this deployment origin through CORS.',
+      actions: [
+        'Open the model base URL in a new tab and confirm manifest.json is reachable over HTTPS.',
+        'Check the failed request’s status and CORS headers in DevTools → Network.',
+        'Retry after disabling a content blocker, VPN, or extension that may intercept large model requests.',
+      ],
+    }
+  }
+  if (/webgpu.*unavailable|navigator\.gpu|unsupported adapter|hardware acceleration/.test(evidence)) {
+    return {
+      category: 'WebGPU unavailable',
+      likelyCause: 'This browser context did not expose a compatible hardware WebGPU adapter. Insecure origins, disabled acceleration, browser policy, or an unsupported browser can cause this.',
+      actions: [
+        'Use current desktop Chrome or Edge over HTTPS.',
+        'Enable hardware acceleration and restart the browser.',
+        'Inspect chrome://gpu and confirm WebGPU is hardware accelerated rather than blocked.',
+      ],
+    }
+  }
+  if (/background|image processing|birefnet|wasm-fp32|ortrun/.test(evidence)) {
+    return {
+      category: 'Local background-removal failure',
+      likelyCause: 'The separate browser-local image segmentation model failed before TripoSplat generation began. This is independent of the 6.5 GB TripoSplat WebGPU model.',
+      actions: [
+        'Hard-refresh once to replace any stale image-processing worker and retry.',
+        'Try a transparent PNG/WebP to bypass automatic background removal and confirm the main model path separately.',
+        'Copy this report so the last image-processing stage and backend can be identified.',
+      ],
+    }
+  }
+  if (/graph.*load|session.*creat|onnx.*initial|inference failed/.test(evidence)) {
+    return {
+      category: 'ONNX graph initialization or inference failure',
+      likelyCause: 'ONNX Runtime could not create or execute one of the model graph sessions. The last runtime events below identify the graph and provider involved.',
+      actions: [
+        'Retry once; fatal worker failures now force creation of a clean runtime.',
+        'If the same graph fails again, verify browser version, available memory, and that all model files use one manifest revision.',
+        'Copy this report and include the graph session ID and final runtime event when filing an issue.',
+      ],
+    }
+  }
+  if (/decode|unsupported.*image|invalid.*image|image.*format/.test(evidence)) {
+    return {
+      category: 'Input image failure',
+      likelyCause: 'The browser could not decode or normalize the selected image format.',
+      actions: [
+        'Re-export the image as an ordinary PNG, WebP, or JPEG.',
+        'Remove unusual color profiles or very large dimensions before retrying.',
+        'Try a known-good transparent PNG to isolate image decoding from model execution.',
+      ],
+    }
+  }
+  return {
+    category: 'Unclassified browser runtime failure',
+    likelyCause: 'The runtime returned an error that does not match a known failure signature. The environment and event trail in the report are intended to identify the responsible stage.',
+    actions: [
+      'Retry once after a hard refresh.',
+      'Copy the diagnostic report and include the exact action that triggered the failure.',
+      'Check DevTools Console and Network for the first error, not only later cascading errors.',
+    ],
+  }
+}
+
+function diagnosticUrl(value: string): string {
+  try {
+    const url = new URL(value, document.baseURI)
+    url.username = ''
+    url.password = ''
+    url.search = ''
+    url.hash = ''
+    return url.href
+  } catch {
+    return '[invalid URL]'
+  }
+}
+
+function recordRuntimeStatus(status: RuntimeStatus): void {
+  runtimeDiagnosticEvents.push({ ...status, observedAt: new Date().toISOString() })
+  if (runtimeDiagnosticEvents.length > 40) runtimeDiagnosticEvents.splice(0, runtimeDiagnosticEvents.length - 40)
+  if (verboseRuntimeDiagnostics) console.debug('[TripoSplat runtime]', status)
+}
+
+function buildDiagnosticReport(
+  message: string,
+  detailText: string,
+  diagnosis: FailureDiagnosis,
+): string {
+  const memory = measureBrowserMemory()
+  const deviceMemory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory
+  const ortBaseUrl = new URL(`${import.meta.env.BASE_URL}ort/`, document.baseURI)
+  const runtimeTrail = runtimeDiagnosticEvents.length > 0
+    ? runtimeDiagnosticEvents.map((event) => {
+        const context = [event.sessionId, event.provider].filter(Boolean).join(' · ')
+        return `${event.observedAt} · ${event.stage}${context ? ` · ${context}` : ''} · ${event.message}`
+      })
+    : ['No main-model runtime events were received before this failure.']
+  const imageProgress = lastImagePreparationProgress
+    ? `${lastImagePreparationProgress.stage} · ${lastImagePreparationProgress.message}${lastImagePreparationProgress.fraction === undefined ? '' : ` · ${Math.round(lastImagePreparationProgress.fraction * 100)}%`}`
+    : 'No image-preparation progress event recorded.'
+  const selectedImageSummary = selectedImage
+    ? `${selectedImage.width}×${selectedImage.height} · ${selectedImage.hasAlpha ? 'alpha present' : 'opaque'} · ${selectedImage.inputIsPrepared ? 'prepared' : 'raw'}`
+    : 'No image selected.'
+
+  return [
+    'TripoSplat WebGPU diagnostic report',
+    `App version: ${APP_VERSION}`,
+    `App build (UTC): ${APP_BUILD_TIME}`,
+    `Captured (UTC): ${new Date().toISOString()}`,
+    `Category: ${diagnosis.category}`,
+    `User-visible error: ${message}`,
+    `Likely cause: ${diagnosis.likelyCause}`,
+    '',
+    'Recommended actions',
+    ...diagnosis.actions.map((action, index) => `${index + 1}. ${action}`),
+    '',
+    'Failure context',
+    `Page: ${location.origin}${location.pathname}`,
+    `Run stage: ${runStage.textContent ?? 'unknown'}`,
+    `Run status: ${runStatus.textContent ?? 'unknown'}`,
+    `Last active phase: ${activeRunMarker?.phase ?? (lastRunMarkerPhase || 'none')}`,
+    `Image preparation: ${imageProgress}`,
+    `Input: ${selectedImageSummary}`,
+    '',
+    'Environment',
+    `Browser: ${compatibility?.browser ?? navigator.userAgent}`,
+    `User agent: ${navigator.userAgent}`,
+    `WebGPU exposed: ${String(Boolean((navigator as Navigator & { gpu?: unknown }).gpu))}`,
+    `WebGPU adapter: ${compatibility?.adapterName ?? 'not exposed'}`,
+    `Secure context: ${String(window.isSecureContext)}`,
+    `Cross-origin isolated: ${String(window.crossOriginIsolated)}`,
+    `Online: ${String(navigator.onLine)}`,
+    `Logical CPU cores: ${navigator.hardwareConcurrency || 'not exposed'}`,
+    `Device memory hint: ${deviceMemory ? `${deviceMemory} GiB` : 'not exposed'}`,
+    `Main JS heap used: ${memory.usedJsHeapBytes === undefined ? 'not exposed' : formatBytes(memory.usedJsHeapBytes)}`,
+    `Main JS heap limit: ${memory.jsHeapLimitBytes === undefined ? 'not exposed' : formatBytes(memory.jsHeapLimitBytes)}`,
+    `Cache backend: ${cacheBackend}`,
+    `Storage qualification: ${storageQualification?.message ?? 'not completed'}`,
+    `Model base: ${diagnosticUrl(modelBaseInput.value)}`,
+    `ORT asset base: ${ortBaseUrl.href}`,
+    `Image-prep backend policy: WASM fp32 first`,
+    `Verbose runtime logging: ${verboseRuntimeDiagnostics ? 'enabled (?debug=1)' : 'disabled (append ?debug=1)'}`,
+    '',
+    'Compatibility evidence',
+    diagnosticValueText(compatibility ?? { supported: false, note: 'Compatibility check not completed.' }),
+    '',
+    'Main-model runtime event trail (oldest to newest)',
+    ...runtimeTrail,
+    '',
+    'Raw error details',
+    detailText,
+  ].join('\n')
+}
+
 function hideDiagnostics(): void {
   diagnostics.hidden = true
+  diagnosticReportText = ''
   diagnosticMessage.textContent = ''
+  diagnosticCause.textContent = ''
+  diagnosticActions.replaceChildren()
   diagnosticDetails.textContent = ''
+  copyDiagnosticsButton.textContent = 'Copy diagnostic report'
 }
 
 function showDiagnostics(message: string, detail?: unknown): void {
+  const detailText = diagnosticValueText(detail)
+  const diagnosis = diagnoseFailure(message, detailText)
+  diagnosticReportText = buildDiagnosticReport(message, detailText, diagnosis)
   diagnosticMessage.textContent = message
-  diagnosticDetails.textContent = typeof detail === 'string'
-    ? detail
-    : JSON.stringify(detail ?? {}, null, 2)
+  diagnosticCause.textContent = `${diagnosis.category}: ${diagnosis.likelyCause}`
+  diagnosticActions.replaceChildren(...diagnosis.actions.map((action) => {
+    const item = document.createElement('li')
+    item.textContent = action
+    return item
+  }))
+  diagnosticDetails.textContent = diagnosticReportText
+  copyDiagnosticsButton.textContent = 'Copy diagnostic report'
   diagnostics.hidden = false
+  console.error('[TripoSplat diagnostic]', diagnosticReportText)
+}
+
+async function copyDiagnosticReport(): Promise<void> {
+  if (!diagnosticReportText) return
+  await writeClipboard(diagnosticReportText)
+  copyDiagnosticsButton.textContent = 'Copied'
 }
 
 function friendlyError(error: unknown): { message: string; details: unknown } {
@@ -1001,7 +1152,14 @@ function friendlyError(error: unknown): { message: string; details: unknown } {
     }
     return {
       message: help[error.code] ?? error.message,
-      details: { code: error.code, stage: error.stage, recoverable: error.recoverable, diagnostics: error.diagnostics, cause: String(error.cause ?? '') },
+      details: {
+        code: error.code,
+        stage: error.stage,
+        recoverable: error.recoverable,
+        diagnostics: error.diagnostics,
+        cause: error.cause,
+        stack: error.stack,
+      },
     }
   }
   if (error instanceof TypeError && /fetch|network/i.test(error.message)) {
@@ -1196,6 +1354,7 @@ function reportImagePreparationProgress(
   preparationController: AbortController,
 ): void {
   if (!isCurrentImageSelection(selectionId) || activePreparationController !== preparationController) return
+  lastImagePreparationProgress = progress
   const percentage = progress.fraction === undefined ? undefined : Math.round(progress.fraction * 100)
   imagePreparationStatus.dataset.state = 'working'
   imagePreparationStatus.textContent = percentage === undefined
@@ -1208,6 +1367,7 @@ async function prepareSelectedImage(selectionId = selectedImage?.selectionId): P
   const image = selectedImage
   if (!image || selectionId === undefined || selectionId !== image.selectionId || !isCurrentImageSelection(selectionId) || busy) return
   hideDiagnostics()
+  lastImagePreparationProgress = undefined
   const preparationController = new AbortController()
   activePreparationController = preparationController
   setBusy(true)
@@ -1333,11 +1493,6 @@ function renderPlatformQualification(): void {
   items.push(platformRunBlocker
     ? { text: platformRunBlocker, state: 'problem' }
     : { text: 'Desktop-class browser detected.', state: 'ready' })
-  if (REQUIRE_MAC_MPS_FLOW) {
-    items.push(MAC_MPS_FLOW === undefined
-      ? { text: 'Exact local Mac MPS sampler is not connected.', state: 'problem' }
-      : { text: 'Exact local Mac MPS sampler configured.', state: 'ready' })
-  }
   if (modelServerProblem) {
     items.push({ text: modelServerProblem, state: 'problem' })
   } else if (storageQualification) {
@@ -1354,15 +1509,12 @@ function renderPlatformQualification(): void {
     && storageQualification?.supported === true
     && platformRunBlocker === undefined
     && modelServerProblem === undefined
-    && (!REQUIRE_MAC_MPS_FLOW || MAC_MPS_FLOW !== undefined)
   platformBadge.classList.toggle('is-ready', ready)
   platformBadge.classList.toggle('is-missing', !ready)
   platformBadge.lastElementChild!.textContent = ready
     ? storageQualification?.state === 'warning' ? 'Ready with warning' : 'Browser ready'
     : platformRunBlocker
       ? 'Desktop required'
-      : REQUIRE_MAC_MPS_FLOW && MAC_MPS_FLOW === undefined
-        ? 'Connect Mac MPS'
       : compatibility?.supported === false
         ? 'WebGPU blocked'
         : storageQualification?.supported === false
@@ -1430,10 +1582,7 @@ async function verifyModelServer(
   }
   const manifest: unknown = await response.json().catch(() => undefined)
   if (manifest === undefined) throw new Error('The model manifest was not valid JSON.')
-  const summary = summarizeModelManifest(
-    manifest,
-    MAC_MPS_FLOW === undefined && !REQUIRE_MAC_MPS_FLOW ? new Set() : new Set(['dit']),
-  )
+  const summary = summarizeModelManifest(manifest)
   const qualification = await qualifyStorage(summary)
   return { summary, qualification }
 }
@@ -1489,8 +1638,6 @@ async function checkPlatform(): Promise<void> {
     setRunStatus('UNSUPPORTED', compatibility?.blockers.join(' ') || 'WebGPU is unavailable in this browser.')
   } else if (modelServerProblem) {
     setRunStatus('MODEL CHECK FAILED', modelServerProblem)
-  } else if (REQUIRE_MAC_MPS_FLOW && MAC_MPS_FLOW === undefined) {
-    setRunStatus('CONNECT MAC MPS', 'Start the v2 Mac launcher and connect its authenticated local service.')
   } else if (!storageQualification?.supported) {
     setRunStatus('STORAGE BLOCKED', storageQualification?.message ?? 'Browser storage could not be qualified.')
     showDiagnostics(storageQualification?.message ?? 'Browser storage could not be qualified.', storageQualification)
@@ -1507,17 +1654,17 @@ async function checkPlatform(): Promise<void> {
 async function prepareModel(base: string, signal: AbortSignal): Promise<TripoSplatWebGPU> {
   if (model && loadedModelBase === base) return model
   if (model) await model.dispose()
+  const ortBaseUrl = new URL(`${import.meta.env.BASE_URL}ort/`, document.baseURI)
   model = new TripoSplatWebGPU({
     modelBaseUrl: base,
     manifestUrl: 'manifest.json',
     executionProviders: ['webgpu'],
     cache: cacheBackend,
-    ...(MAC_MPS_FLOW === undefined
-      ? {}
-      : { prefetchGraphs: ['dino', 'vae', 'octree', 'gaussianDecoder'] as const }),
+    logLevel: verboseRuntimeDiagnostics ? 'debug' : 'error',
+    onRuntimeStatus: recordRuntimeStatus,
     wasmPaths: {
-      mjs: '/ort/ort-wasm-simd-threaded.asyncify.mjs',
-      wasm: '/ort/ort-wasm-simd-threaded.asyncify.wasm',
+      mjs: new URL('ort-wasm-simd-threaded.asyncify.mjs', ortBaseUrl).href,
+      wasm: new URL('ort-wasm-simd-threaded.asyncify.wasm', ortBaseUrl).href,
     },
   })
   loadedModelBase = undefined
@@ -1557,24 +1704,17 @@ async function run(): Promise<void> {
   if (busy || activeRunController) throw new Error('Wait for the current image operation to finish before generating.')
   if (!compatibility?.supported) throw new Error('This browser does not meet the current WebGPU requirements.')
   if (platformRunBlocker) throw new Error(platformRunBlocker)
-  if (REQUIRE_MAC_MPS_FLOW && MAC_MPS_FLOW === undefined) {
-    throw new Error('Connect the authenticated local Mac MPS service before generating.')
-  }
   requireQualifiedStorage(storageQualification)
   const base = normalizedModelBase(modelBaseInput.value)
   hideDiagnostics()
+  runtimeDiagnosticEvents.length = 0
   armCompletionChime()
   const runController = new AbortController()
   activeRunController = runController
   startRunTelemetry(storageQualification?.cachedBytes ?? 0)
   setBusy(true)
   startActiveRunMarker()
-  setRunStatus(
-    'SOURCE IMAGE',
-    MAC_MPS_FLOW === undefined
-      ? 'Image accepted. Starting a local, browser-only generation…'
-      : 'Image accepted. Starting browser preprocessing with the exact native Mac MPS sampler…',
-  )
+  setRunStatus('SOURCE IMAGE', 'Image accepted. Starting a local, browser-only generation…')
   setPreviewRunState(
     activePlyUrl ? 'retained' : 'working',
     activePlyUrl
@@ -1598,7 +1738,6 @@ async function run(): Promise<void> {
       inputIsPrepared: image.inputIsPrepared,
       signal: runController.signal,
       onProgress: reportGenerationProgress,
-      ...(MAC_MPS_FLOW === undefined ? {} : { macMpsFlow: MAC_MPS_FLOW }),
     })
     try {
       updateActiveRunMarker('export')
@@ -1671,7 +1810,6 @@ function modelBaseFromLocation(): string {
 modelBaseInput.value = modelBaseFromLocation()
 applyProgressDetailMode(progressDetailMode, false)
 renderPreview()
-renderMpsConnection()
 
 for (const button of progressDetailButtons) {
   button.addEventListener('click', () => {
@@ -1726,15 +1864,6 @@ sourcePanel.addEventListener('drop', (event) => {
 })
 
 dropZone.addEventListener('click', () => fileInput.click())
-mpsConnectButton.addEventListener('click', () => {
-  void connectMacMpsFlow().catch((error) => {
-    const friendly = friendlyError(error)
-    mpsConnection.dataset.state = 'error'
-    mpsConnectionBadge.textContent = 'CONNECTION FAILED'
-    mpsConnectionStatus.dataset.state = 'error'
-    mpsConnectionStatus.textContent = friendly.message
-  })
-})
 modelBaseInput.addEventListener('input', () => {
   modelServerCheckSequence += 1
   const sequence = modelServerCheckSequence
@@ -1774,6 +1903,11 @@ copyBenchmarkButton.addEventListener('click', () => {
   void copyBenchmarkReport().catch((error) => {
     const friendly = friendlyError(error)
     benchmarkSummary.textContent = `Could not copy the report: ${friendly.message}`
+  })
+})
+copyDiagnosticsButton.addEventListener('click', () => {
+  void copyDiagnosticReport().catch((error) => {
+    copyDiagnosticsButton.textContent = `Copy failed: ${error instanceof Error ? error.message : String(error)}`
   })
 })
 

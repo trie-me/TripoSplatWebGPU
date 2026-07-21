@@ -14,7 +14,6 @@ import {
 } from './contracts.js'
 import { decodeGaussians, GAUSSIAN_FEATURE_WIDTH } from './decode.js'
 import { GraphCapabilityError, throwIfAborted } from './errors.js'
-import { runMacMpsFlow } from './mac-mps-flow.js'
 import type { ResolvedGraphManifestEntry } from './manifest.js'
 import { sampleOctree } from './octree.js'
 import { fillNormal, Mulberry32 } from './random.js'
@@ -308,46 +307,10 @@ export async function runBuiltInTripoSplatPipeline(
       random,
     )
 
+    const { graph: ditGraph, info: ditInfo } = await loadStage(context, 'dit')
+    timings.ditLoadMs = ditInfo.loadMs
     let flowState: FlowState
-    let flowSourceCommit: string | undefined
-    if (options.macMpsFlow !== undefined) {
-      options.onProgress?.({
-        stage: 'sampling',
-        message: `Running the complete ${configuration.steps}-step sampler on native Mac MPS.`,
-        progress: 0,
-        step: 0,
-        totalSteps: configuration.steps,
-        invocation: 0,
-        totalInvocations: configuration.steps * 2,
-      })
-      const result = await runMacMpsFlow(options.macMpsFlow, {
-        latent,
-        camera,
-        feature1,
-        feature2,
-        steps: configuration.steps,
-        guidanceScale: configuration.guidanceScale,
-        shift: configuration.shift,
-        ...(options.signal === undefined ? {} : { signal: options.signal }),
-      })
-      timings.ditLoadMs = result.modelLoadMs ?? 0
-      timings.ditInferenceMs = result.inferenceMs
-      timings.ditReadbackMs = Math.max(0, result.wallMs - result.inferenceMs)
-      flowSourceCommit = result.sourceCommit
-      flowState = { latent: result.latent, camera: result.camera }
-      options.onProgress?.({
-        stage: 'sampling',
-        message: `Native Mac MPS completed ${configuration.steps * 2} official DiT invocations.`,
-        progress: 1,
-        step: configuration.steps,
-        totalSteps: configuration.steps,
-        invocation: configuration.steps * 2,
-        totalInvocations: configuration.steps * 2,
-      })
-    } else {
-      const { graph: ditGraph, info: ditInfo } = await loadStage(context, 'dit')
-      timings.ditLoadMs = ditInfo.loadMs
-      try {
+    try {
       const positiveInputs: TensorMap = {
         feature1: inputTensor(ditGraph, feature1, TRIPOSPLAT_FEATURE1_SHAPE),
         feature2: inputTensor(ditGraph, feature2, TRIPOSPLAT_FEATURE2_SHAPE),
@@ -436,9 +399,8 @@ export async function runBuiltInTripoSplatPipeline(
           ...(options.signal === undefined ? {} : { signal: options.signal }),
         },
       )
-      } finally {
-        await context.runtime.disposeGraph(context.sessionIds.dit)
-      }
+    } finally {
+      await context.runtime.disposeGraph(context.sessionIds.dit)
     }
     const sampledLatent = flowState.latent
     assertLength('sampled latent', sampledLatent, elementCount(TRIPOSPLAT_LATENT_SHAPE))
@@ -545,8 +507,6 @@ export async function runBuiltInTripoSplatPipeline(
         shift: configuration.shift,
         gaussianCount: configuration.gaussianCount,
         precision: context.manifest.precision,
-        flowBackend: options.macMpsFlow === undefined ? 'webgpu' : 'pytorch-mps-fp32',
-        ...(flowSourceCommit === undefined ? {} : { flowSourceCommit }),
         inputIsPrepared: options.inputIsPrepared ?? false,
         usedBackgroundRemoval: prepared.usedBackgroundRemoval,
         measuredTimingsMs: { ...timings },

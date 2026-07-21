@@ -29,7 +29,12 @@ import {
   type NormalizeTripoSplatImageOptions,
   type TripoSplatBackgroundRemover,
 } from './preprocess.js'
-import { createRuntime, type RuntimeStatus, type TripoSplatRuntime } from './runtime.js'
+import {
+  createRuntime,
+  isRuntimeWorkerFatalError,
+  type RuntimeStatus,
+  type TripoSplatRuntime,
+} from './runtime.js'
 import type {
   CompatibilityOptions,
   CompatibilityReport,
@@ -81,6 +86,8 @@ export type TripoSplatPipelineExecutor = (
 
 export interface TripoSplatWebGPUOptions extends TripoSplatOptions {
   pipeline?: TripoSplatPipelineExecutor
+  /** Receives low-level worker and graph lifecycle events for diagnostics. */
+  onRuntimeStatus?: (status: RuntimeStatus) => void
   /** Advanced override for a validated browser-local preprocessing/segmentation stage. */
   preprocess?: TripoSplatPreprocessor
   /** Browser-local opaque-image remover, normally backed by a separately validated BiRefNet graph. */
@@ -355,10 +362,14 @@ export class TripoSplatWebGPU {
       }
       return scene
     } catch (error) {
-      // Cancellation and WebGPU device loss both poison the in-flight ORT
-      // worker. Recreate the entire runtime lazily on the next call; sessions
-      // and buffers from a lost device must never be reused.
-      if (error instanceof CancelledError || isWebGpuDeviceLostError(error)) {
+      // Cancellation, WebGPU device loss, and fatal worker transport errors
+      // poison the in-flight ORT worker. Recreate the entire runtime lazily on
+      // the next call; sessions and buffers from that worker must not be reused.
+      if (
+        error instanceof CancelledError
+        || isWebGpuDeviceLostError(error)
+        || isRuntimeWorkerFatalError(error)
+      ) {
         await this.resetRuntime()
       }
       throw error
@@ -502,6 +513,11 @@ export class TripoSplatWebGPU {
   }
 
   private logRuntimeStatus(status: RuntimeStatus): void {
+    try {
+      this.options.onRuntimeStatus?.(status)
+    } catch (error) {
+      if (this.options.logLevel !== 'silent') console.warn('[TripoSplatWebGPU] Runtime status callback failed.', error)
+    }
     if (this.options.logLevel === 'debug') console.debug('[TripoSplatWebGPU]', status)
     else if (this.options.logLevel === 'info') console.info('[TripoSplatWebGPU]', status.message)
   }

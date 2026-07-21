@@ -2,8 +2,12 @@
   "name": "triposplat-webgpu",
   "private": true,
   "version": "0.0.0",
+  "description": "Browser-local WebGPU engineering preview of the TripoSplat image-to-3D pipeline.",
   "type": "module",
   "packageManager": "pnpm@11.13.0",
+  "engines": {
+    "node": ">=22"
+  },
   "workspaces": [
     "packages/*"
   ],
@@ -17,7 +21,8 @@
     "typecheck": "tsc -b",
     "test": "node --test tests/*.test.ts",
     "test:package-consumer": "node scripts/test_packed_vite_consumer.mjs",
-    "build:viewer": "cd packages/sharp-splat-viewer && bun run build",
+    "build:viewer": "pnpm --filter @bring-shrubbery/sharp-splat-viewer build",
+    "audit:public": "node scripts/audit_public_repo.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -48,22 +53,20 @@
     "typescript-eslint": "^8.48.0",
     "vite": "^7.3.1"
   },
-  "description": "An in-progress browser-local WebGPU port of [TripoSplat](https://github.com/VAST-AI-Research/TripoSplat), built from the [ml-sharp-web](https://github.com/bring-shrubbery/ml-sharp-web) application chassis. The official TripoSplat PyTorch implementation is the numerical source of truth. The existing SHARP path remains available as a known-good browser inference baseline.",
-  "main": "eslint.config.js",
-  "directories": {
-    "doc": "docs",
-    "example": "examples",
-    "test": "tests"
-  },
+  "keywords": [
+    "triposplat",
+    "webgpu",
+    "image-to-3d",
+    "gaussian-splats",
+    "onnx"
+  ],
+  "license": "UNLICENSED",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bring-shrubbery/ml-sharp-web.git"
+    "url": "git+https://github.com/ai3d-dev/TripoSplatWebGPU.git"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "bugs": {
-    "url": "https://github.com/bring-shrubbery/ml-sharp-web/issues"
+    "url": "https://github.com/ai3d-dev/TripoSplatWebGPU/issues"
   },
-  "homepage": "https://github.com/bring-shrubbery/ml-sharp-web#readme"
+  "homepage": "https://github.com/ai3d-dev/TripoSplatWebGPU#readme"
 }

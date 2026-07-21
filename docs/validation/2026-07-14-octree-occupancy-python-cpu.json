@@ -2,11 +2,11 @@
   "artifacts": [
     {
       "bytes": 805392,
-      "path": "/Users/mbp16_2022_m1max/MyTests/TripoSplatWebGPU/public/models/triposplat/octree_occupancy_decoder.onnx"
+      "path": "$REPO/public/models/triposplat/octree_occupancy_decoder.onnx"
     },
     {
       "bytes": 101599232,
-      "path": "/Users/mbp16_2022_m1max/MyTests/TripoSplatWebGPU/public/models/triposplat/octree_occupancy_decoder.onnx.data"
+      "path": "$REPO/public/models/triposplat/octree_occupancy_decoder.onnx.data"
     }
   ],
   "comparison": {
@@ -136,7 +136,7 @@
   },
   "passed": false,
   "runtime": {
-    "onnx": "/Users/mbp16_2022_m1max/MyTests/TripoSplatWebGPU/public/models/triposplat/octree_occupancy_decoder.onnx",
+    "onnx": "$REPO/public/models/triposplat/octree_occupancy_decoder.onnx",
     "onnxruntime": "1.27.0",
     "ort_providers": [
       "CPUExecutionProvider"

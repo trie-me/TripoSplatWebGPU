@@ -303,9 +303,9 @@
   },
   "runtime": {
     "external_data": [
-      "/Users/mbp16_2022_m1max/MyTests/TripoSplatWebGPU/public/models/triposplat/dit_step_fp32.onnx.data"
+      "$REPO/public/models/triposplat/dit_step_fp32.onnx.data"
     ],
-    "graph": "/Users/mbp16_2022_m1max/MyTests/TripoSplatWebGPU/public/models/triposplat/dit_step_fp32.onnx",
+    "graph": "$REPO/public/models/triposplat/dit_step_fp32.onnx",
     "graph_internal_precision_metadata": "fp32",
     "onnx": "1.22.0",
     "onnxruntime": "1.27.0",
@@ -317,7 +317,7 @@
     "torch": "2.13.0",
     "torch_device": "mps"
   },
-  "saved_fixture": "/Users/mbp16_2022_m1max/MyTests/TripoSplatWebGPU/public/fixtures/generated/dit-step-fp32-compute/fixture.npz",
+  "saved_fixture": "$REPO/public/fixtures/generated/dit-step-fp32-compute/fixture.npz",
   "source": {
     "checkout": "/private/tmp/triposplat-official-root",
     "commit": "a78fa12d06dbf1381ca548bfac32bb68cb8c451d",

@@ -92,7 +92,7 @@
   },
   "passed": true,
   "runtime": {
-    "onnx": "/Users/mbp16_2022_m1max/MyTests/TripoSplatWebGPU/public/models/triposplat/dinov3_encoder_fp32.onnx",
+    "onnx": "$REPO/public/models/triposplat/dinov3_encoder_fp32.onnx",
     "onnxruntime": "1.27.0",
     "ort_providers": [
       "CPUExecutionProvider"

@@ -86,7 +86,7 @@ function drawMesh(context: CanvasRenderingContext2D, points: readonly Vector[], 
   }
 }
 
-function HeroAnimation(): ReactElement {
+export function HeroAnimation(): ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
     const canvas = canvasRef.current

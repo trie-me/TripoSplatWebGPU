@@ -29,11 +29,14 @@
     "3d",
     "sharp"
   ],
-  "homepage": "https://github.com/bring-shrubbery/ml-sharp-web/tree/main/packages/sharp-splat-viewer#readme",
+  "homepage": "https://github.com/ai3d-dev/TripoSplatWebGPU/tree/main/packages/sharp-splat-viewer#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bring-shrubbery/ml-sharp-web.git",
+    "url": "git+https://github.com/ai3d-dev/TripoSplatWebGPU.git",
     "directory": "packages/sharp-splat-viewer"
+  },
+  "bugs": {
+    "url": "https://github.com/ai3d-dev/TripoSplatWebGPU/issues"
   },
   "license": "MIT",
   "peerDependencies": {

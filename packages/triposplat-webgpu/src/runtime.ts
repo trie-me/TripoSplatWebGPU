@@ -299,6 +299,26 @@ function packagedWasmPaths(): { mjs: string; wasm: string } {
   }
 }
 
+class RuntimeWorkerFatalError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'RuntimeWorkerFatalError'
+  }
+}
+
+/** Returns true when a runtime worker transport failed and must be recreated. */
+export function isRuntimeWorkerFatalError(value: unknown): boolean {
+  const visited = new Set<object>()
+  let current = value
+  for (let depth = 0; depth < 8 && current !== undefined && current !== null; depth += 1) {
+    if (current instanceof RuntimeWorkerFatalError) return true
+    if (typeof current !== 'object' || visited.has(current)) return false
+    visited.add(current)
+    current = (current as { cause?: unknown }).cause
+  }
+  return false
+}
+
 class WorkerRuntime implements TripoSplatRuntime {
   private readonly worker: Worker
   private readonly pending = new Map<string, Pending>()
@@ -324,9 +344,11 @@ class WorkerRuntime implements TripoSplatRuntime {
     this.onStatus = options.onStatus
     this.worker.onmessage = (event: MessageEvent<RuntimeWorkerMessage>) => this.handleMessage(event.data)
     this.worker.onerror = (event: ErrorEvent) => {
-      this.fail(new Error(event.message || 'TripoSplat runtime worker failed.'))
+      this.fail(new RuntimeWorkerFatalError(event.message || 'TripoSplat runtime worker failed.'))
     }
-    this.worker.onmessageerror = () => this.fail(new Error('Could not deserialize a runtime worker message.'))
+    this.worker.onmessageerror = () => {
+      this.fail(new RuntimeWorkerFatalError('Could not deserialize a runtime worker message.'))
+    }
     const configuration = { ...(options.configuration ?? {}) }
     configuration.wasmPaths ??= packagedWasmPaths()
     this.ready = this.send({
