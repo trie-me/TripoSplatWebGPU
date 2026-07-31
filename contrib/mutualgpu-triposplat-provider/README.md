@@ -12,7 +12,7 @@ The following command is a **development bootstrap** for this branch. It clones 
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf \
-  https://raw.githubusercontent.com/ai3d-dev/TripoSplatWebGPU/codex/native-linux-provider/contrib/mutualgpu-triposplat-provider/install/install-from-source.sh \
+  https://raw.githubusercontent.com/trie-me/TripoSplatWebGPU/codex/native-linux-provider/contrib/mutualgpu-triposplat-provider/install/install-from-source.sh \
   | bash -s -- \
     --ref codex/native-linux-provider \
     --backend cuda \
@@ -35,7 +35,7 @@ For a published `triposplat-vX.Y.Z` release, use the release asset bootstrap:
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf \
-  https://github.com/ai3d-dev/TripoSplatWebGPU/releases/download/triposplat-v0.1.0/install.sh \
+  https://github.com/trie-me/TripoSplatWebGPU/releases/download/triposplat-v0.1.0/install.sh \
   | bash -s -- --version triposplat-v0.1.0 --backend cuda --download-models
 ```
 
