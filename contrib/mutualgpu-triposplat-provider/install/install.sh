@@ -13,7 +13,7 @@ data_root="${XDG_DATA_HOME:-$HOME/.local/share}/mutualgpu/triposplat"
 config_root="${XDG_CONFIG_HOME:-$HOME/.config}/mutualgpu/triposplat"
 bin_dir="${HOME}/.local/bin"
 model_root="${XDG_DATA_HOME:-$HOME/.local/share}/mutualgpu/triposplat/models"
-release_base="${MUTUALGPU_TRIPOSPLAT_RELEASE_BASE_URL:-https://github.com/ai3d-dev/TripoSplatWebGPU/releases/download}"
+release_base="${MUTUALGPU_TRIPOSPLAT_RELEASE_BASE_URL:-https://github.com/trie-me/TripoSplatWebGPU/releases/download}"
 provider_key_file=""
 
 usage() {
