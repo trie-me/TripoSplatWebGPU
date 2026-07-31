@@ -12,7 +12,7 @@ The following command is a **development bootstrap** for this branch. It clones 
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf \
-    https://raw.githubusercontent.com/trie-me/TripoSplatWebGPU/codex/native-linux-provider/contrib/mutualgpu-triposplat-provider/install/install-from-source.sh \
+  https://raw.githubusercontent.com/trie-me/TripoSplatWebGPU/codex/native-linux-provider/contrib/mutualgpu-triposplat-provider/install/install-from-source.sh \
   | bash -s -- \
     --ref codex/native-linux-provider \
     --backend cuda \
