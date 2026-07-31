@@ -1,0 +1,18 @@
+{
+  "name": "@ai3d/triposplat-mutualgpu-provider",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/index.mjs",
+    "test": "node --test test/*.test.mjs",
+    "check:python": "python3 -m unittest discover -s test -p '*_test.py'",
+    "check": "npm test && npm run check:python",
+    "build:release": "bash scripts/build-release.sh"
+  },
+  "dependencies": {
+    "@mutualgpu/provider-core": "file:vendor/mutualgpu-sdk/provider-core",
+    "@mutualgpu/provider-node": "file:vendor/mutualgpu-sdk/provider-node"
+  }
+}

@@ -1,0 +1,9 @@
+This directory is a separate, Linux-native MutualGPU provider contribution.
+
+The worker and vendored MutualGPU provider SDK code are licensed under
+AGPL-3.0-only; see LICENSE. The official TripoSplat source files in
+vendor/triposplat/ are retained under their upstream MIT license; see
+vendor/triposplat/LICENSE and UPSTREAM_REVISION.
+
+This contribution is not imported by the browser build and does not change the
+license of the existing WebGPU application outside this directory.
