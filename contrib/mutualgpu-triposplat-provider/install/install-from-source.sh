@@ -2,7 +2,7 @@
 set -euo pipefail
 umask 077
 
-repository="${TRIPOSPLAT_PROVIDER_REPOSITORY:-https://github.com/ai3d-dev/TripoSplatWebGPU.git}"
+repository="${TRIPOSPLAT_PROVIDER_REPOSITORY:-https://github.com/trie-me/TripoSplatWebGPU.git}"
 ref=""
 backend="auto"
 destination="${XDG_DATA_HOME:-$HOME/.local/share}/triposplat-webgpu-provider/source"
