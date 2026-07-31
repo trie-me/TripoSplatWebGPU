@@ -68,6 +68,10 @@ pnpm dev
 
 Open `http://localhost:<PORT>/e2e-web-debug.html`. Test inputs and recorded outputs are stored in [`public/_testers`](https://github.com/ai3d-dev/TripoSplatWebGPU/tree/main/public/_testers).
 
+### Native Linux MutualGPU provider contribution
+
+The browser provider is complemented by a Linux-native CUDA/ROCm fallback contribution under [`contrib/mutualgpu-triposplat-provider`](contrib/mutualgpu-triposplat-provider/). It is a standalone AGPL-licensed foreground provider with its own pinned dependencies and does not participate in the browser build. Its README includes a branch-curlable developer bootstrap and the immutable release-installation path.
+
 ### Native Apple Silicon reference
 
 The exact native runner has been extracted into the separate `TripoSplatMac`

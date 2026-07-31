@@ -1,0 +1,11 @@
+{
+  "name": "@mutualgpu/provider-core",
+  "version": "0.1.0-preview.4",
+  "type": "module",
+  "exports": {
+    ".": "./src/provider.js",
+    "./result-upload": "./src/result-upload.js",
+    "./protocol": "./src/protocol.js"
+  }
+}
+
