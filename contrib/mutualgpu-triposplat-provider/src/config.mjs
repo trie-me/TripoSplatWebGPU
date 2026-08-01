@@ -55,7 +55,7 @@ export function buildEnrollment(config) {
       inputs: [
         { key: "image_url", type: "Image", required: true, label: "Image", description: "Input image to convert into a 3D Gaussian splat.", contentTypes: MEDIA_TYPES, displayOrder: 0 },
         { key: "num_gaussians", type: "Integer", required: false, label: "Number of Gaussians", description: "Target Gaussian count; values are rounded by the official pipeline to a multiple of 32.", default: "262144", minimum: 32768, maximum: 262144, displayOrder: 1 },
-        { key: "num_inference_steps", type: "Integer", required: false, label: "Inference steps", description: "The supported production schedules are 4 and 20 steps.", default: "20", allowedValues: ["4", "20"], displayOrder: 2 },
+        { key: "num_inference_steps", type: "Integer", required: false, label: "Inference steps", description: "The supported production schedules are 4 and 20 steps.", default: "20", minimum: 4, maximum: 20, displayOrder: 2 },
         { key: "guidance_scale", type: "Number", required: false, label: "Guidance scale", description: "Classifier-free guidance strength.", default: "3", minimum: 0, maximum: 20, displayOrder: 3 },
         { key: "output_format", type: "String", required: false, label: "Output format", description: "The requested primary Gaussian-splat format; both PLY and SPLAT are included for compatibility.", default: "ply", allowedValues: ["ply", "splat"], displayOrder: 4 },
         { key: "seed", type: "Integer", required: false, label: "Seed", description: "Optional unsigned 32-bit seed. A random seed is selected when omitted.", minimum: 0, maximum: 4294967295, displayOrder: 5 },
@@ -127,4 +127,3 @@ function boolean(value, name) {
   if (value === "false") return false;
   throw new TypeError(`${name} must be true or false.`);
 }
-

@@ -12,6 +12,9 @@ test("exact tripo-splat enrollment contract remains stable", () => {
   assert.deepEqual(enrollment.capabilities[0].inputs.map(input => input.key), ["image_url", "num_gaussians", "num_inference_steps", "guidance_scale", "output_format", "seed", "enable_safety_checker"]);
   assert.equal(enrollment.capabilities[0].inputs[0].type, "Image");
   assert.deepEqual(enrollment.capabilities[0].inputs[0].contentTypes, ["image/png", "image/jpeg", "image/webp"]);
+  assert.deepEqual(enrollment.capabilities[0].inputs[2].allowedValues, undefined);
+  assert.equal(enrollment.capabilities[0].inputs[2].minimum, 4);
+  assert.equal(enrollment.capabilities[0].inputs[2].maximum, 20);
   assert.deepEqual(enrollment.capabilities[0].output, { hasMetadata: true });
 });
 
@@ -42,4 +45,3 @@ function environment() {
     MUTUALGPU_TRIPOSPLAT_MODEL_MANIFEST: "/models/manifest.json"
   };
 }
-
