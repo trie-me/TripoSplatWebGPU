@@ -70,7 +70,7 @@ Open `http://localhost:<PORT>/e2e-web-debug.html`. Test inputs and recorded outp
 
 ### Native Linux MutualGPU provider contribution
 
-The browser provider is complemented by a Linux-native CUDA/ROCm fallback contribution under [`contrib/mutualgpu-triposplat-provider`](contrib/mutualgpu-triposplat-provider/). It is a standalone AGPL-licensed foreground provider with its own pinned dependencies and does not participate in the browser build. Its README includes a branch-curlable developer bootstrap and the immutable release-installation path.
+The browser provider is complemented by a Linux-native CUDA/ROCm fallback contribution under [`contrib/ComputeWorkers/MutualGPU/linux`](contrib/ComputeWorkers/MutualGPU/linux/). It is a standalone AGPL-licensed foreground provider with its own pinned dependencies and does not participate in the browser build. Its README includes a branch-curlable developer bootstrap and the immutable release-installation path.
 
 ### Native Apple Silicon reference
 

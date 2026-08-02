@@ -3,7 +3,7 @@ set -euo pipefail
 umask 077
 
 worker_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-repo_dir="$(cd "$worker_dir/../.." && pwd)"
+repo_dir="$(git -C "$worker_dir" rev-parse --show-toplevel)"
 version="${1:-}"
 [[ "$version" =~ ^triposplat-v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "usage: build-release.sh triposplat-vX.Y.Z" >&2; exit 2; }
 asset_version="${version#triposplat-}"

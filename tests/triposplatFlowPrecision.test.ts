@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 
 import {
   blendClassifierFreeGuidance,
@@ -199,7 +200,7 @@ class DetachingOrtWorker {
 test('TripoSplat makes a fresh timestep transport tensor before each transferred CFG call', async () => {
   const { createServer } = await import('vite')
   const vite = await createServer({
-    root: new URL('..', import.meta.url).pathname,
+    root: fileURLToPath(new URL('..', import.meta.url)),
     configFile: false,
     appType: 'custom',
     logLevel: 'silent',

@@ -42,7 +42,7 @@ if [[ "$backend" == auto ]]; then
   elif command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then backend=cuda
   else fail "could not detect a usable NVIDIA CUDA or AMD ROCm runtime"; fi
 fi
-worker_dir="$destination/contrib/mutualgpu-triposplat-provider"
+worker_dir="$destination/contrib/ComputeWorkers/MutualGPU/linux"
 if "$dry_run"; then
   echo "would clone $repository at $ref into $destination"
   echo "would run npm ci and frozen uv sync for $backend"

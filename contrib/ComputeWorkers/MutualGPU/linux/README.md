@@ -12,9 +12,9 @@ The following command is a **development bootstrap** for this branch. It clones 
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf \
-  https://raw.githubusercontent.com/trie-me/TripoSplatWebGPU/codex/native-linux-provider/contrib/mutualgpu-triposplat-provider/install/install-from-source.sh \
+  https://raw.githubusercontent.com/trie-me/TripoSplatWebGPU/codex/compute-workers-mutualgpu-linux/contrib/ComputeWorkers/MutualGPU/linux/install/install-from-source.sh \
   | bash -s -- \
-    --ref codex/native-linux-provider \
+    --ref codex/compute-workers-mutualgpu-linux \
     --backend cuda \
     --download-models
 ```
@@ -22,7 +22,7 @@ curl --proto '=https' --tlsv1.2 -LsSf \
 It prints the exact foreground command after setup. Store the provider key in a one-line `chmod 600` file and run:
 
 ```bash
-~/.local/share/triposplat-webgpu-provider/source/contrib/mutualgpu-triposplat-provider/run-worker.sh run \
+~/.local/share/triposplat-webgpu-provider/source/contrib/ComputeWorkers/MutualGPU/linux/run-worker.sh run \
   --provider-key-file /secure/provider.key \
   --backend cuda
 ```
