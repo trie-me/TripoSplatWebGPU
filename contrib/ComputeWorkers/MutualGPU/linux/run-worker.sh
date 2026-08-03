@@ -2,9 +2,13 @@
 set -euo pipefail
 
 worker_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TRIPOSPLAT_ERROR_PREFIX="TripoSplat worker"
+# Reuse the installer's no-guess readiness checks for direct/source runs too.
+# shellcheck source=install/lib.sh
+source "$worker_dir/install/lib.sh"
 model_revision="de3b99ab2627d565a8d5fc40f2db52557b82b974"
-backend="auto"
-provider_key_file=""
+backend="${MUTUALGPU_TRIPOSPLAT_BACKEND:-auto}"
+provider_key_file="${MUTUALGPU_PROVIDER_KEY_FILE:-}"
 model_dir="${MUTUALGPU_TRIPOSPLAT_MODEL_DIR:-}"
 api_url="${MUTUALGPU_API_URL:-https://mutualgpu.com}"
 
@@ -41,12 +45,9 @@ done
 mode="$(stat -c '%a' "$provider_key_file")"
 (( (8#$mode & 8#077) == 0 )) || fail "provider key file must be chmod 600"
 
-if [[ "$backend" == "auto" ]]; then
-  if command -v rocminfo >/dev/null 2>&1 && rocminfo >/dev/null 2>&1; then backend="rocm"
-  elif command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then backend="cuda"
-  else fail "could not detect a usable NVIDIA CUDA or AMD ROCm runtime"; fi
-fi
-[[ "$backend" == "cuda" || "$backend" == "rocm" ]] || fail "--backend must be auto, cuda, or rocm"
+triposplat_detect_backends
+triposplat_select_backend "$backend"
+backend="$TRIPOSPLAT_SELECTED_BACKEND"
 if [[ -z "$model_dir" && -r "$worker_dir/model-dir" ]]; then model_dir="$(<"$worker_dir/model-dir")"; fi
 model_dir="${model_dir:-$worker_dir/models/$model_revision}"
 
@@ -66,4 +67,3 @@ export MUTUALGPU_TRIPOSPLAT_MODEL_MANIFEST="$worker_dir/model-manifest.json"
 
 echo "[preflight] Linux $backend worker; verifying the GPU, models, and optional Vulkan diagnostics before enrollment."
 exec env -u SSL_CERT_DIR node "$worker_dir/src/index.mjs"
-

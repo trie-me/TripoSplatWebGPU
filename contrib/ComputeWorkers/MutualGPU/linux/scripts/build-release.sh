@@ -8,14 +8,14 @@ version="${1:-}"
 [[ "$version" =~ ^triposplat-v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "usage: build-release.sh triposplat-vX.Y.Z" >&2; exit 2; }
 asset_version="${version#triposplat-}"
 for backend in cuda rocm; do [[ -f "$worker_dir/runtime/$backend/uv.lock" ]] || { echo "missing frozen lock: runtime/$backend/uv.lock" >&2; exit 2; }; done
-out_dir="$worker_dir/dist"
+out_dir="${TRIPOSPLAT_RELEASE_OUT_DIR:-$worker_dir/dist}"
 stage="$(mktemp -d "${TMPDIR:-/tmp}/triposplat-mutualgpu-release.XXXXXX")"
 cleanup() { rm -rf -- "$stage"; }
 trap cleanup EXIT
 archive_root="$stage/mutualgpu-triposplat-$asset_version"
 mkdir -p "$archive_root/node_modules/@mutualgpu/provider-core/src" "$archive_root/node_modules/@mutualgpu/provider-node/src"
 cp -R "$worker_dir/src" "$worker_dir/vendor/triposplat" "$worker_dir/runtime" "$worker_dir/install" "$archive_root/"
-cp "$worker_dir/model-manifest.json" "$worker_dir/run-worker.sh" "$worker_dir/README.md" "$worker_dir/package.json" "$worker_dir/LICENSE" "$worker_dir/NOTICE" "$archive_root/"
+cp "$worker_dir/model-manifest.json" "$worker_dir/run-worker.sh" "$worker_dir/README.md" "$worker_dir/MIGRATION.md" "$worker_dir/package.json" "$worker_dir/LICENSE" "$worker_dir/NOTICE" "$archive_root/"
 cp -R "$worker_dir/vendor/mutualgpu-sdk/provider-core/src/." "$archive_root/node_modules/@mutualgpu/provider-core/src/"
 cp "$worker_dir/vendor/mutualgpu-sdk/provider-core/package.json" "$archive_root/node_modules/@mutualgpu/provider-core/package.json"
 cp -R "$worker_dir/vendor/mutualgpu-sdk/provider-node/src/." "$archive_root/node_modules/@mutualgpu/provider-node/src/"
@@ -25,7 +25,14 @@ mkdir -p "$out_dir"
 archive="$out_dir/mutualgpu-triposplat-${asset_version}-linux-x86_64.tar.gz"
 tar -C "$stage" -czf "$archive" "$(basename "$archive_root")"
 if command -v sha256sum >/dev/null; then sha256sum "$archive" >"$archive.sha256"; else shasum -a 256 "$archive" >"$archive.sha256"; fi
-cp "$worker_dir/install/install.sh" "$out_dir/install.sh"
+{
+  sed -n '1,3p' "$worker_dir/install/install.sh"
+  printf '\n'
+  cat "$worker_dir/install/lib.sh"
+  printf '\n'
+  sed -n '/^version=""$/,$p' "$worker_dir/install/install.sh"
+} >"$out_dir/install.sh"
+chmod 0755 "$out_dir/install.sh"
 if command -v sha256sum >/dev/null; then sha256sum "$out_dir/install.sh" >"$out_dir/install.sh.sha256"; else shasum -a 256 "$out_dir/install.sh" >"$out_dir/install.sh.sha256"; fi
 archive_sha="$(awk '{print $1}' "$archive.sha256")"
 bootstrap_sha="$(awk '{print $1}' "$out_dir/install.sh.sha256")"

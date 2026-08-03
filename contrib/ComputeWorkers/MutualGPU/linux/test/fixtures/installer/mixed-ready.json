@@ -1,0 +1,8 @@
+{
+  "name": "mixed-ready",
+  "cuda": true,
+  "rocmInfo": true,
+  "amdManagement": true,
+  "expectedBackend": null,
+  "graphics": "NVIDIA Corporation Device 2684 and AMD Device 744c"
+}

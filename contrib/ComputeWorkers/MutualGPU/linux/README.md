@@ -31,7 +31,8 @@ The key is read only by the Node controller, never accepted as a command-line va
 
 ## Immutable release installation
 
-For a published `triposplat-vX.Y.Z` release, use the release asset bootstrap:
+Once a `triposplat-vX.Y.Z` release has been published, use the release asset
+bootstrap:
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf \
@@ -40,6 +41,61 @@ curl --proto '=https' --tlsv1.2 -LsSf \
 ```
 
 That bootstrap verifies the release archive SHA-256 before activation, maintains the previous version for rollback, uses the relevant `uv.lock`, and never resolves dependencies while serving. The verify-then-run procedure is documented in [install/install.sh](install/install.sh); it is the preferred path for production. A release is not created by this branch alone.
+
+`triposplat-v0.1.0` is not published yet, so the example release URL currently
+returns 404 and must not be used as an installation command. Until publication,
+use the branch development bootstrap above; it retrieves the matching helper
+only when the bootstrap itself is piped from GitHub.
+
+## Host-aware foreground installation
+
+The immutable installer first explains the Linux host rather than hiding backend
+selection in environment variables. It reports graphics inventory from `inxi`,
+`lspci`, and sysfs when available, then checks NVIDIA with `nvidia-smi` and AMD
+with both `rocminfo` and `amd-smi` or `rocm-smi`. `vulkaninfo --summary` is an
+optional browser diagnostic only; it is never an inference requirement. The
+selected frozen environment must also pass its matching CUDA or ROCm/HIP
+PyTorch probe before it is activated. The installer never calls `sudo` or
+installs drivers.
+
+For Python downloads, the installer asks `uv` to use the Linux system
+certificate store. This supports hosts whose organization adds a trusted proxy
+or root CA there, without disabling TLS verification. It clears inherited
+`SSL_CERT_FILE` and `SSL_CERT_DIR` for that first attempt because either can
+silently override system trust. If a deliberately configured custom CA bundle
+is needed, the installer retries with it. If neither trust source validates the
+issuer, repair the host trust configuration; do not use an insecure-download
+override.
+
+`--backend auto` selects the only ready backend. If both CUDA and ROCm are
+ready, it stops and asks for an explicit `--backend cuda` or `--backend rocm`;
+it will not silently guess on mixed hardware. `--install-dir`, `--config-dir`,
+`--model-dir`, `--shim-dir`, and `--api-url` are explicit path/endpoint
+overrides for operators who need them.
+
+On success, non-secret configuration and an executable launcher are written
+beneath `${XDG_CONFIG_HOME:-$HOME/.config}/mutualgpu/triposplat`. The installer
+scans `PATH` for a private user-owned directory before adding these foreground
+commands:
+
+```bash
+mutualgpu-triposplat
+mutualgpu-triposplat-restart
+```
+
+The first command defaults to `run`; `restart` starts a fresh foreground
+worker. Neither command controls a daemon or creates any persistence. If a
+private `--provider-key-file` is supplied at install time, only its pathname is
+kept in mode-`0600` configuration; the key bytes are never copied, logged, or
+passed to Python. Otherwise pass the protected file path on the first run:
+
+```bash
+mutualgpu-triposplat run --provider-key-file /secure/provider.key
+```
+
+See [MIGRATION.md](MIGRATION.md) for the canary test gates and the exact
+software/service rollback procedure. Keep the browser provider available until
+the Linux host has completed that qualification matrix.
 
 ## Exact provider compatibility
 

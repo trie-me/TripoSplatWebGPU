@@ -1,0 +1,8 @@
+{
+  "name": "rocm-ready",
+  "cuda": false,
+  "rocmInfo": true,
+  "amdManagement": true,
+  "expectedBackend": "rocm",
+  "graphics": "Advanced Micro Devices, Inc. [AMD/ATI] Device 744c"
+}

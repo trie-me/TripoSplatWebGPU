@@ -1,0 +1,7 @@
+{
+  "name": "nvidia-ready",
+  "cuda": true,
+  "rocm": false,
+  "expectedBackend": "cuda",
+  "graphics": "NVIDIA Corporation Device 2684"
+}
