@@ -64,10 +64,6 @@ test("fixture-driven mixed hardware is never silently guessed and an explicit ov
 test("branch bootstrap piped from GitHub retrieves its matching helper before a dry-run", async () => {
   const fixture = await loadFixture("nvidia-ready");
   await withFixture(fixture, async context => {
-    const pipedDirectory = join(context.root, "piped-from-github");
-    const pipedScript = join(pipedDirectory, "install-from-source.sh");
-    await mkdir(pipedDirectory, { mode: 0o700 });
-    await writeFile(pipedScript, await readFile(sourceInstall, "utf8"));
     const curl = join(context.root, "commands", "curl");
     await writeFile(curl, [
       "#!/bin/sh",
@@ -78,7 +74,7 @@ test("branch bootstrap piped from GitHub retrieves its matching helper before a 
     ].join("\n"));
     await chmod(curl, 0o755);
     const result = await run("/bin/bash", [
-      pipedScript,
+      "-s", "--",
       "--ref", "codex/compute-workers-mutualgpu-linux",
       "--backend", "cuda",
       "--dry-run"
@@ -86,7 +82,7 @@ test("branch bootstrap piped from GitHub retrieves its matching helper before a 
       ...context.environment,
       TRIPOSPLAT_PROVIDER_RAW_BASE: "https://raw.fixture/trie-me/TripoSplatWebGPU",
       TRIPOSPLAT_TEST_INSTALLER_LIBRARY: installerLibrary
-    });
+    }, await readFile(sourceInstall, "utf8"));
     assert.equal(result.code, 0, result.stderr);
     assert.match(result.stdout, /selected cuda \(requested cuda\)/);
     assert.match(result.stdout, /would clone https:\/\/github.com\/trie-me\/TripoSplatWebGPU.git/);
@@ -215,13 +211,14 @@ function runInstaller(context, extra = []) {
   return run("/bin/bash", [install, "--version", "triposplat-v0.1.0", "--dry-run", ...extra], context.environment);
 }
 
-function run(command, args, environment) {
+function run(command, args, environment, input = "") {
   return new Promise(resolve => {
-    const child = spawn(command, args, { env: environment, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(command, args, { env: environment, stdio: ["pipe", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", value => { stdout += value; });
     child.stderr.on("data", value => { stderr += value; });
+    child.stdin.end(input);
     child.on("close", code => resolve({ code, stdout, stderr }));
   });
 }

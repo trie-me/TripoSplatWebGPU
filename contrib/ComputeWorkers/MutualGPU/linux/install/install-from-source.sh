@@ -2,8 +2,16 @@
 set -euo pipefail
 umask 077
 
-installer_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-installer_library="${TRIPOSPLAT_INSTALLER_LIBRARY:-$installer_dir/lib.sh}"
+# BASH_SOURCE has no element when this program is read from standard input by
+# `curl ... | bash -s --`.  Do not derive a directory until there is a real
+# script file; the matching helper is fetched below for that deliberately
+# supported execution mode.
+script_source="${BASH_SOURCE[0]:-}"
+installer_library="${TRIPOSPLAT_INSTALLER_LIBRARY:-}"
+if [[ -z "$installer_library" && -n "$script_source" && -f "$script_source" ]]; then
+  installer_dir="$(cd -- "$(dirname -- "$script_source")" && pwd -P)"
+  installer_library="$installer_dir/lib.sh"
+fi
 library_temporary=""
 early_fail() { echo "TripoSplat source installer: $1" >&2; exit 2; }
 
