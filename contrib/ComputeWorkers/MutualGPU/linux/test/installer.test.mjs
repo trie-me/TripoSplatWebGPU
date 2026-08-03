@@ -135,6 +135,7 @@ test("installer remains Linux-only, immutable-versioned, frozen, and foreground-
   assert.match(text, /triposplat-v/);
   assert.match(text, /triposplat_sync_frozen_environment/);
   assert.match(sourceText, /triposplat_sync_frozen_environment/);
+  assert.match(sourceText, /chmod 0755 "\$worker_dir\/run-worker\.sh"/);
   assert.match(text, /probe-pytorch.py/);
   assert.match(library, /inxi/);
   assert.match(library, /lspci/);

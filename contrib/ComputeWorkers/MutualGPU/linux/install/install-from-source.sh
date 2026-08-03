@@ -80,6 +80,11 @@ command -v npm >/dev/null || triposplat_fail "npm is required"
 command -v uv >/dev/null || triposplat_fail "uv 0.11 is required"
 if [[ -e "$destination" ]]; then triposplat_fail "destination already exists: $destination"; fi
 git clone --depth 1 --branch "$ref" "$repository" "$destination"
+# A source checkout can come from an archive, a filesystem that does not
+# retain Git modes, or a repository whose executable bits were normalized by
+# an intermediary.  The command printed below must be runnable without asking
+# the operator to repair permissions themselves.
+chmod 0755 "$worker_dir/run-worker.sh"
 npm ci --prefix "$worker_dir"
 triposplat_sync_frozen_environment "$worker_dir/runtime/$backend"
 "$worker_dir/runtime/$backend/.venv/bin/python" "$worker_dir/install/probe-pytorch.py" --backend "$backend"
