@@ -89,6 +89,39 @@ test("branch bootstrap piped from GitHub retrieves its matching helper before a 
   });
 });
 
+test("source bootstrap restores the foreground launcher permission and can install without starting", async () => {
+  const fixture = await loadFixture("nvidia-ready");
+  await withFixture(fixture, async context => {
+    const sourceContent = join(context.root, "source-content");
+    const sourceWorker = join(sourceContent, "contrib", "ComputeWorkers", "MutualGPU", "linux");
+    const destination = join(context.root, "source-destination");
+    await mkdir(join(sourceWorker, "runtime", "cuda", ".venv", "bin"), { recursive: true });
+    await mkdir(join(sourceWorker, "install"), { recursive: true });
+    await writeFile(join(sourceWorker, "run-worker.sh"), "#!/bin/sh\nexit 0\n", { mode: 0o644 });
+    await writeFile(join(sourceWorker, "runtime", "cuda", ".venv", "bin", "python"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    await chmod(join(sourceWorker, "runtime", "cuda", ".venv", "bin", "python"), 0o755);
+    await writeFile(join(context.root, "commands", "git"), [
+      "#!/bin/sh",
+      "set -eu",
+      "for argument in \"$@\"; do destination=\"$argument\"; done",
+      "cp -R \"$TRIPOSPLAT_TEST_SOURCE_CONTENT/.\" \"$destination\""
+    ].join("\n"));
+    await writeFile(join(context.root, "commands", "npm"), "#!/bin/sh\nexit 0\n");
+    await writeFile(join(context.root, "commands", "uv"), "#!/bin/sh\nexit 0\n");
+    await Promise.all(["git", "npm", "uv"].map(name => chmod(join(context.root, "commands", name), 0o755)));
+    const result = await run("/bin/bash", [
+      sourceInstall,
+      "--ref", "codex/compute-workers-mutualgpu-linux",
+      "--backend", "cuda",
+      "--destination", destination,
+      "--no-run"
+    ], { ...context.environment, TRIPOSPLAT_TEST_SOURCE_CONTENT: sourceContent });
+    assert.equal(result.code, 0, result.stderr);
+    assert.match(result.stdout, /foreground worker was not started/);
+    assert.equal((await stat(join(destination, "contrib", "ComputeWorkers", "MutualGPU", "linux", "run-worker.sh"))).mode & 0o777, 0o755);
+  });
+});
+
 test("configuration is private, contains only the key-file path, and the PATH resolver selects a safe user directory", async () => {
   const fixture = await loadFixture("nvidia-ready");
   await withFixture(fixture, async context => {
@@ -136,6 +169,9 @@ test("installer remains Linux-only, immutable-versioned, frozen, and foreground-
   assert.match(text, /triposplat_sync_frozen_environment/);
   assert.match(sourceText, /triposplat_sync_frozen_environment/);
   assert.match(sourceText, /chmod 0755 "\$worker_dir\/run-worker\.sh"/);
+  assert.match(sourceText, /Paste the actual MutualGPU provider key/);
+  assert.match(sourceText, /exec "\$worker_dir\/run-worker\.sh" run/);
+  assert.match(sourceText, /--no-run/);
   assert.match(text, /probe-pytorch.py/);
   assert.match(library, /inxi/);
   assert.match(library, /lspci/);

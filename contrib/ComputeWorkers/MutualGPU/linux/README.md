@@ -19,15 +19,14 @@ curl --proto '=https' --tlsv1.2 -LsSf \
     --download-models
 ```
 
-It prints the exact foreground command after setup. Store the provider key in a one-line `chmod 600` file and run:
-
-```bash
-~/.local/share/triposplat-webgpu-provider/source/contrib/ComputeWorkers/MutualGPU/linux/run-worker.sh run \
-  --provider-key-file /secure/provider.key \
-  --backend cuda
-```
-
-The key is read only by the Node controller, never accepted as a command-line value, never logged, and never passed into the Python GPU subprocess.
+After GPU and model verification, it invisibly prompts once for the **actual**
+MutualGPU provider credential and writes it only to a mode-`0600` file beneath
+`${XDG_CONFIG_HOME:-$HOME/.config}/mutualgpu/triposplat/`. It then starts the
+foreground worker; Ctrl-C stops it. The key is read only by the Node
+controller, never logged, and never passed into the Python GPU subprocess. To
+use an existing protected credential instead, add
+`--provider-key-file /absolute/path/to/actual-provider.key`; the file must be
+owned by the current user and mode `0600`.
 
 ## Immutable release installation
 
@@ -90,7 +89,7 @@ kept in mode-`0600` configuration; the key bytes are never copied, logged, or
 passed to Python. Otherwise pass the protected file path on the first run:
 
 ```bash
-mutualgpu-triposplat run --provider-key-file /secure/provider.key
+mutualgpu-triposplat run --provider-key-file /absolute/path/to/actual-provider.key
 ```
 
 See [MIGRATION.md](MIGRATION.md) for the canary test gates and the exact
